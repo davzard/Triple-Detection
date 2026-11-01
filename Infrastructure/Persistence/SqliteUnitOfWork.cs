@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Domain.Repositories;
+using TripleDetection.Infrastructure.Repositories;
 
 namespace TripleDetection.Infrastructure.Persistence;
 

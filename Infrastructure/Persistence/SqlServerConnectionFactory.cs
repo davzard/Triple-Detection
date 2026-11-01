@@ -1,3 +1,7 @@
+// SQL Server 连接工厂（预留功能，当前未启用）。
+// 启用方式：在 csproj 中添加 <PackageReference Include="Microsoft.Data.SqlClient" />，
+// 并定义编译常量 USE_SQLSERVER（<DefineConstants>$(DefineConstants);USE_SQLSERVER</DefineConstants>）。
+#if USE_SQLSERVER
 using System;
 using System.Data.Common;
 using Microsoft.Data.SqlClient;
@@ -18,3 +22,4 @@ public class SqlServerConnectionFactory : IDbConnectionFactory
         return new SqlConnection(_connectionString);
     }
 }
+    #endif

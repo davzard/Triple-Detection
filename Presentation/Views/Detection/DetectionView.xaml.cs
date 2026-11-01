@@ -4,56 +4,60 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
-using VM.Core;
-using TripleDetection.Application.VmServices;
 using TripleDetection.Application.Services;
-using TripleDetection.Presentation.ViewModels;
-using TripleDetection.Presentation.ViewModels.Detection;
-using MessageBox = System.Windows.MessageBox;
+using TripleDetection.Application.VmServices;
 using TripleDetection.Presentation.Models;
+using MessageBox = System.Windows.MessageBox;
 using TaskEntity = TripleDetection.Domain.Entities.ProdTask;
+#if VM_SDK
+using VM.Core;
 using GlobalVariableModuleCs;
-using TripleDetection.Infrastructure.Repositories;
+#endif
 
 namespace TripleDetection.Presentation.Views.Detection
 {
     public partial class DetectionView : UserControl
     {
         private readonly LoggingService _logService;
-        private readonly MainViewModel _viewModel;
-        private readonly VmIntegrationService _vmService;
+        private readonly IDetectionEngine _engine;
+        private readonly ITaskService _taskService;
+        private readonly IProductService _productService;
+
         private string _selectedSolPath;
         private bool _isSolutionLoad = false;
         private bool _isContinuRun = false;
-        private VmProcedure _procedure;
-        private VMControls.Winform.Release.VmRenderControl _vmRender;
         private List<TaskEntity> _taskList = new List<TaskEntity>();
         private TaskEntity _selectedTask;
         private int _okCount = 0;
         private int _ngCount = 0;
+#if VM_SDK
+        private VmProcedure _procedure;
+        private VMControls.Winform.Release.VmRenderControl _vmRender;
+#endif
 
-        public DetectionView()
+        public DetectionView(IDetectionEngine engine, ITaskService taskService, IProductService productService, LoggingService logService)
         {
             InitializeComponent();
-            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
-            _logService = new LoggingService(logPath);
-            _viewModel = new MainViewModel();
+            _engine = engine;
+            _taskService = taskService;
+            _productService = productService;
+            _logService = logService;
 
-            var repositoryFactory = new SqliteRepositoryFactory();
-            var detectionRecordRepository = repositoryFactory.CreateDetectionRecordRepository();
-            var detectionRecordService = new DetectionRecordService(detectionRecordRepository);
-
-            _vmService = new VmIntegrationService(null, _logService, detectionRecordService);
-            _vmService.OnDetectionResult += VmService_OnDetectionResult;
+            _engine.DetectionResult += Engine_OnDetectionResult;
 
             LoadTasks();
             SubscribeToLogs();
 
             _logService.Log("检测页面已加载");
+#if !VM_SDK
+            _logService.Log("[Mock] 当前构建未包含 VisionMaster SDK，检测由模拟引擎执行");
+#endif
         }
 
-        private void VmService_OnDetectionResult(object sender, DetectionResult result)
+        private void Engine_OnDetectionResult(object sender, DetectionResult result)
         {
             Dispatcher.Invoke(() =>
             {
@@ -63,8 +67,7 @@ namespace TripleDetection.Presentation.Views.Detection
 
         private void LoadTasks()
         {
-            var taskService = new TaskService();
-            var tasks = taskService.GetAll().Where(t => t.Status == Data.Entities.TaskStatus.Approved).ToList();
+            var tasks = _taskService.GetAll().Where(t => t.Status == TaskStatus.Approved).ToList();
             _taskList = tasks;
             cmbTaskSelect.Items.Clear();
             foreach (var task in tasks)
@@ -82,12 +85,13 @@ namespace TripleDetection.Presentation.Views.Detection
             if (cmbTaskSelect.SelectedItem == null) return;
 
             var selectedIndex = cmbTaskSelect.SelectedIndex;
+            if (selectedIndex < 0 || selectedIndex >= _taskList.Count) return;
             _selectedTask = _taskList[selectedIndex];
 
-            _vmService.SetCurrentTaskContext(_selectedTask.Id, _selectedTask.ProductId, _selectedTask.BatchNumber);
+            _engine.SetCurrentTaskContext(_selectedTask.Id, _selectedTask.ProductId, _selectedTask.BatchNumber,
+                _selectedTask.ProductionDate, _selectedTask.ExpirationDate);
 
-            var productService = new ProductService();
-            var product = productService.GetById(_selectedTask.ProductId);
+            var product = _productService.GetById(_selectedTask.ProductId);
 
             var productName = product?.Name ?? "--";
             var solFilePath = product?.SolFilePath ?? "--";
@@ -105,29 +109,54 @@ namespace TripleDetection.Presentation.Views.Detection
 
         private void UpdateDetectionResult(DetectionResult result)
         {
-            Dispatcher.Invoke(() =>
+            var status = result.IsOK ? "OK" : "NG";
+            txtCurrentResult.Text = status;
+            txtCurrentResult.Foreground = result.IsOK
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 192, 0))
+                : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 0, 0));
+
+            txtPassRate.Text = (_okCount + _ngCount) > 0
+                ? ((double)_okCount / (_okCount + _ngCount)).ToString("P2")
+                : "0%";
+
+            if (result.IsOK) _okCount++;
+            else _ngCount++;
+            txtOkCount.Text = $"OK: {_okCount}";
+            txtNgCount.Text = $"NG: {_ngCount}";
+
+            var logEntry = $"[{DateTime.Now:HH:mm:ss}] {_selectedTask?.Name}: {status} | 批号={result.BatchNumber} | 生产日期={result.ProductionDate} | 有效期至={result.ExpirationDate} | 耗时={result.ElapsedMs}ms";
+            lstDetectionLogs.Items.Insert(0, logEntry);
+            if (lstDetectionLogs.Items.Count > 100)
+                lstDetectionLogs.Items.RemoveAt(lstDetectionLogs.Items.Count - 1);
+
+#if !VM_SDK
+            // 模拟模式：显示本次保存的检测图像
+            if (!string.IsNullOrEmpty(result.ImagePath) && File.Exists(result.ImagePath))
             {
-                var status = result.IsOK ? "OK" : "NG";
-                txtCurrentResult.Text = status;
-                txtCurrentResult.Foreground = result.IsOK
-                    ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 192, 0))
-                    : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 0, 0));
-
-                txtPassRate.Text = (_okCount + _ngCount) > 0
-                    ? ((double)_okCount / (_okCount + _ngCount)).ToString("P2")
-                    : "0%";
-
-                if (result.IsOK) _okCount++;
-                else _ngCount++;
-                txtOkCount.Text = $"OK: {_okCount}";
-                txtNgCount.Text = $"NG: {_ngCount}";
-
-                var logEntry = $"[{DateTime.Now:HH:mm:ss}] {_selectedTask?.Name}: {status} | 批号={result.BatchNumber} | 生产日期={result.ProductionDate} | 有效期至={result.ExpirationDate} | 耗时={result.ElapsedMs}ms";
-                lstDetectionLogs.Items.Insert(0, logEntry);
-                if (lstDetectionLogs.Items.Count > 100)
-                    lstDetectionLogs.Items.RemoveAt(lstDetectionLogs.Items.Count - 1);
-            });
+                ShowMockImage(result.ImagePath);
+            }
+#endif
         }
+
+#if !VM_SDK
+        private void ShowMockImage(string imagePath)
+        {
+            try
+            {
+                var img = new Image
+                {
+                    Stretch = Stretch.Uniform,
+                    Source = new BitmapImage(new Uri(imagePath))
+                };
+                VmRenderHost.Child = img;
+                txtVmRenderPlaceholder.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                _logService.Log($"显示模拟图像失败: {ex.Message}");
+            }
+        }
+#endif
 
         private void SubscribeToLogs()
         {
@@ -142,6 +171,7 @@ namespace TripleDetection.Presentation.Views.Detection
             };
         }
 
+#if VM_SDK
         private void InitVmRender()
         {
             if (_vmRender == null)
@@ -152,16 +182,11 @@ namespace TripleDetection.Presentation.Views.Detection
             }
         }
 
-        private GlobalVariableModuleTool GetGlobalVariableTool()
+        private VmProcedure GetProcedure()
         {
-            GlobalVariableModuleTool globalVar = VmSolution.Instance["全局变量1"] as GlobalVariableModuleTool;
-            // return the gmt
-            if(globalVar == null)
-            {
-             _logService.Log($"获取全局变量工具: {globalVar}");
-            }
-            return globalVar;
+            return (_engine as VmIntegrationService)?.GetProcedure();
         }
+#endif
 
         private void BtnSelectSol_Click(object sender, RoutedEventArgs e)
         {
@@ -182,8 +207,7 @@ namespace TripleDetection.Presentation.Views.Detection
             {
                 if (_selectedTask != null)
                 {
-                    var productService = new ProductService();
-                    var product = productService.GetById(_selectedTask.ProductId);
+                    var product = _productService.GetById(_selectedTask.ProductId);
                     if (product != null && !string.IsNullOrEmpty(product.SolFilePath))
                     {
                         _selectedSolPath = product.SolFilePath;
@@ -191,11 +215,19 @@ namespace TripleDetection.Presentation.Views.Detection
                     }
                 }
 
+#if VM_SDK
                 if (string.IsNullOrEmpty(_selectedSolPath))
                 {
                     MessageBox.Show("请先选择方案文件!", "警告", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
+#else
+                if (string.IsNullOrEmpty(_selectedSolPath))
+                {
+                    _selectedSolPath = "mock://主检测流程.sol";
+                    _logService.Log("[Mock] 未指定方案文件，使用内置模拟方案");
+                }
+#endif
             }
 
             try
@@ -205,14 +237,14 @@ namespace TripleDetection.Presentation.Views.Detection
                     _isSolutionLoad = false;
                 }
 
-                _vmService.LoadSolution(_selectedSolPath);
+                _engine.LoadSolution(_selectedSolPath);
                 _isSolutionLoad = true;
 
                 _logService.Log("加载方案成功!");
                 MessageBox.Show("加载方案成功!", "信息", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 cmbProcedure.Items.Clear();
-                foreach (var name in _vmService.GetAllProcedureNames())
+                foreach (var name in _engine.GetAllProcedureNames())
                 {
                     cmbProcedure.Items.Add(name);
                 }
@@ -220,7 +252,8 @@ namespace TripleDetection.Presentation.Views.Detection
                 if (cmbProcedure.Items.Count > 0)
                 {
                     cmbProcedure.SelectedIndex = 0;
-                    _procedure = _vmService.GetProcedure();
+#if VM_SDK
+                    _procedure = GetProcedure();
                     if (_procedure == null)
                     {
                         _logService.Log("Procedure 为空，请检查方案!");
@@ -228,6 +261,9 @@ namespace TripleDetection.Presentation.Views.Detection
                     }
                     InitVmRender();
                     _vmRender.ModuleSource = _procedure;
+#else
+                    _logService.Log("[Mock] 模拟流程已就绪，可执行单次/连续运行");
+#endif
                 }
                 else
                 {
@@ -236,6 +272,7 @@ namespace TripleDetection.Presentation.Views.Detection
             }
             catch (Exception ex)
             {
+#if VM_SDK
                 dynamic vmEx = ex;
                 if (vmEx.errorCode != null)
                 {
@@ -243,6 +280,7 @@ namespace TripleDetection.Presentation.Views.Detection
                     MessageBox.Show($"加载方案失败: 0x{vmEx.errorCode:X}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
                 else
+#endif
                 {
                     _logService.Log($"加载方案失败: {ex.Message}");
                     MessageBox.Show($"加载方案失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -272,9 +310,9 @@ namespace TripleDetection.Presentation.Views.Detection
                     ? _selectedTask.ExpirationDate.Value.ToString("yyyyMMdd")
                     : "";
 
-                _vmService.SetGlobalVariableString("BN", batchNumber);
-                _vmService.SetGlobalVariableString("Mfg", mfgDate);
-                _vmService.SetGlobalVariableString("EXP", expDate);
+                _engine.SetGlobalVariableString("BN", batchNumber);
+                _engine.SetGlobalVariableString("Mfg", mfgDate);
+                _engine.SetGlobalVariableString("EXP", expDate);
 
                 _logService.Log($"三期信息已设置ToVM: BN={batchNumber}, Mfg={mfgDate}, EXP={expDate}");
                 MessageBox.Show($"三期信息已设置:\nBN={batchNumber}\nMfg={mfgDate}\nEXP={expDate}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -289,7 +327,7 @@ namespace TripleDetection.Presentation.Views.Detection
 
         private void BtnLoadFromVm_Click(object sender, RoutedEventArgs e)
         {
-            if (!_isSolutionLoad || _vmService.GetProcedure() == null)
+            if (!_isSolutionLoad || !_engine.HasProcedure)
             {
                 MessageBox.Show("请先加载方案!", "警告", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -297,16 +335,9 @@ namespace TripleDetection.Presentation.Views.Detection
 
             try
             {
-                var gvTool = GetGlobalVariableTool();
-                if (gvTool == null)
-                {
-                    MessageBox.Show("未找到全局变量模块!\n请确认方案中已添加全局变量模块。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                string bn = gvTool.GetGlobalVar("BN") ?? "";
-                string mfg = gvTool.GetGlobalVar("Mfg") ?? "";
-                string exp = gvTool.GetGlobalVar("EXP") ?? "";
+                string bn = _engine.GetGlobalVariableString("BN") ?? "";
+                string mfg = _engine.GetGlobalVariableString("Mfg") ?? "";
+                string exp = _engine.GetGlobalVariableString("EXP") ?? "";
 
                 _logService.Log($"三期信息已获取FromVM: BN={bn}, Mfg={mfg}, EXP={exp}");
                 MessageBox.Show($"三期信息:\nBN={bn}\nMfg={mfg}\nEXP={exp}", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -324,26 +355,30 @@ namespace TripleDetection.Presentation.Views.Detection
 
             try
             {
-                _vmService.SetProcedure(cmbProcedure.SelectedItem.ToString());
-                _procedure = _vmService.GetProcedure();
+                _engine.SetProcedure(cmbProcedure.SelectedItem.ToString());
+#if VM_SDK
+                _procedure = GetProcedure();
                 if (_vmRender != null)
                     _vmRender.ModuleSource = _procedure;
+#endif
 
                 _logService.Log($"已选择 [{cmbProcedure.SelectedItem}]");
             }
             catch (Exception ex)
             {
+#if VM_SDK
                 dynamic vmEx = ex;
                 if (vmEx.errorCode != null)
                     _logService.Log($"选择流程失败, 错误码: 0x{vmEx.errorCode:X}");
                 else
+#endif
                     _logService.Log($"选择流程失败: {ex.Message}");
             }
         }
 
         private void BtnTaskRun_Click(object sender, RoutedEventArgs e)
         {
-            if (!_isSolutionLoad || _vmService.GetProcedure() == null)
+            if (!_isSolutionLoad || !_engine.HasProcedure)
             {
                 _logService.Log("流程不存在!");
                 return;
@@ -351,22 +386,24 @@ namespace TripleDetection.Presentation.Views.Detection
 
             try
             {
-                _vmService.RunOnce();
+                _engine.RunOnce();
                 _logService.Log("单次运行已触发，等待结果回调...");
             }
             catch (Exception ex)
             {
+#if VM_SDK
                 dynamic vmEx = ex;
                 if (vmEx.errorCode != null)
                     _logService.Log($"单次运行失败, 错误码: 0x{vmEx.errorCode:X}");
                 else
+#endif
                     _logService.Log($"单次运行失败: {ex.Message}");
             }
         }
 
         private void BtnTaskPause_Click(object sender, RoutedEventArgs e)
         {
-            if (!_isSolutionLoad || _vmService.GetProcedure() == null)
+            if (!_isSolutionLoad || !_engine.HasProcedure)
             {
                 _logService.Log("流程不存在!");
                 return;
@@ -374,18 +411,20 @@ namespace TripleDetection.Presentation.Views.Detection
 
             try
             {
-                bool newState = !_vmService.IsContinuousRun;
-                _vmService.SetContinuousRun(newState);
+                bool newState = !_engine.IsContinuousRun;
+                _engine.SetContinuousRun(newState);
                 _isContinuRun = newState;
                 _logService.Log($"连续运行: {newState}");
                 btnContiRun.Content = _isContinuRun ? "停止连续" : "连续运行";
             }
             catch (Exception ex)
             {
+#if VM_SDK
                 dynamic vmEx = ex;
                 if (vmEx.errorCode != null)
                     _logService.Log($"连续运行切换失败, 错误码: 0x{vmEx.errorCode:X}");
                 else
+#endif
                     _logService.Log($"连续运行切换失败: {ex.Message}");
             }
         }

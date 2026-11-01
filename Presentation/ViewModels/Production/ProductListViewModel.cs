@@ -186,7 +186,7 @@ namespace TripleDetection.Presentation.ViewModels.Production
         {
             var editVm = new ProductEditViewModel(product, _productService);
             var editWindow = new Views.Production.ProductEditWindow { DataContext = editVm };
-            editWindow.Owner = Application.Current.MainWindow;
+            editWindow.Owner = System.Windows.Application.Current.MainWindow;
             if (editWindow.ShowDialog() == true)
             {
                 Search();

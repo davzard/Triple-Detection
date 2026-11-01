@@ -4,15 +4,31 @@
     <LangVersion>12.0</LangVersion>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
+    <!-- 部分设置页使用 WinForms 的 FolderBrowserDialog 选择目录 -->
+    <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
     <RootNamespace>TripleDetection</RootNamespace>
     <AssemblyName>TripleDetection.App</AssemblyName>
     <VmInstallPath>C:\Program Files\VisionMaster4.2.0</VmInstallPath>
+    <!-- VisionMaster SDK 可用性检测：SDK DLL 齐全时定义 VM_SDK 宏，启用真实检测引擎；否则使用 MockDetectionEngine -->
+    <VmSdkAvailable Condition="Exists('Infrastructure\libs\VM.Core.dll') AND Exists('$(VmInstallPath)\Development\V4.x\ComControls\Assembly\VMControls.WPF.Release.dll')">true</VmSdkAvailable>
+    <VmSdkAvailable Condition="'$(VmSdkAvailable)' != 'true'">false</VmSdkAvailable>
+    <DefineConstants Condition="'$(VmSdkAvailable)' == 'true'">$(DefineConstants);VM_SDK</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- App.xaml 不在项目根目录，SDK 不会自动将其识别为 ApplicationDefinition（入口点），需显式声明 -->
+    <Page Remove="Presentation\App.xaml" />
+    <ApplicationDefinition Include="Presentation\App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Prism.DryIoc" Version="9.0.537" />
+    <!-- Prism.Wpf 提供 Prism.Regions / PrismApplication 等 WPF 专用类型 -->
+    <PackageReference Include="Prism.Wpf" Version="9.0.537" />
+    <!-- AuditLogView / DetectionHistoryView 使用经典 System.Data.SQLite API -->
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
       <PrivateAssets>all</PrivateAssets>
@@ -21,8 +37,8 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
-  <!-- VisionMaster SDK DLLs -->
-  <ItemGroup>
+  <!-- VisionMaster SDK DLLs（仅当 SDK 存在时引用，见 VmSdkAvailable） -->
+  <ItemGroup Condition="'$(VmSdkAvailable)' == 'true'">
     <Reference Include="VM.Core">
       <HintPath>Infrastructure\libs\VM.Core.dll</HintPath>
       <Private>True</Private>
@@ -174,25 +190,9 @@
     </Reference>
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System" />
-    <Reference Include="System.Configuration" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="System.Deployment" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xml" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="WindowsBase" />
-    <Reference Include="System.Xaml" />
-    <Reference Include="WindowsFormsIntegration" />
-  </ItemGroup>
+  <!-- .NET Framework 时代的遗留程序集引用已在 net8.0-windows 下移除：
+       框架引用（Microsoft.NETCore.App / Microsoft.WindowsDesktop.App）已提供全部基础程序集，
+       显式 Reference 会导致 MSB3245 警告。 -->
 
   <ItemGroup>
     <Content Include="Config\**\*">
@@ -200,7 +200,4 @@
     </Content>
   </ItemGroup>
 
-  <ItemGroup>
-    <Resource Include="Resources\Styles.xaml" />
-  </ItemGroup>
 </Project>

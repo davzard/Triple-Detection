@@ -227,7 +227,7 @@ namespace TripleDetection.Presentation.ViewModels.Auth
         {
             var editVm = new UserEditViewModel(user, _userService);
             var editWindow = new Views.Auth.UserEditWindow { DataContext = editVm };
-            editWindow.Owner = Application.Current.MainWindow;
+            editWindow.Owner = System.Windows.Application.Current.MainWindow;
             if (editWindow.ShowDialog() == true)
             {
                 Search();

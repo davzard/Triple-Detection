@@ -17,7 +17,7 @@
         <Border Grid.Row="0" Grid.Column="0" Margin="5" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
             <Grid>
                 <Border x:Name="VmRenderHost" Background="#F5F5F5"/>
-                <TextBlock Text="VisionMaster 显示区域" Foreground="{StaticResource TextSecondaryBrush}"
+                <TextBlock x:Name="txtVmRenderPlaceholder" Text="VisionMaster 显示区域" Foreground="{StaticResource TextSecondaryBrush}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            FontSize="14" IsHitTestVisible="False"/>
             </Grid>

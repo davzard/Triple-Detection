@@ -1,5 +1,5 @@
 using Prism.Events;
-using TripleDetection.Application.Services.System;
+using TripleDetection.Application.Services;
 
 namespace TripleDetection.Presentation.Events
 {

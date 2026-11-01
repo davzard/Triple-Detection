@@ -1,7 +1,9 @@
+using TripleDetection.Presentation;
 using System.Windows;
 using System.Windows.Controls;
 using TripleDetection.Presentation.ViewModels.Settings;
 using TripleDetection.Application.SettingsServices;
+using TripleDetection.Application.VmServices;
 
 namespace TripleDetection.Presentation.Views
 {
@@ -23,7 +25,7 @@ namespace TripleDetection.Presentation.Views
             _vmService = new VmSettingsService();
             _sysService = new SystemSettingsService();
             _deviceService = new DeviceControlSettingsService();
-            _viewModel = new SettingsShellViewModel();
+            _viewModel = ViewResolver.Resolve<SettingsShellViewModel>();
 
             _navButtons = new[] { btnCommunication, btnVmSettings, btnSystem, btnDeviceControl };
 

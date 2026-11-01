@@ -1,3 +1,4 @@
+using TripleDetection.Presentation;
 using System.Windows;
 using System.Windows.Controls;
 using TripleDetection.Presentation.ViewModels;
@@ -12,7 +13,7 @@ namespace TripleDetection.Presentation.Views.Auth
         public UserManagementView()
         {
             InitializeComponent();
-            DataContext = new UserManagementViewModel();
+            DataContext = ViewResolver.Resolve<UserManagementViewModel>();
         }
 
         private void BtnSearch_Click(object sender, RoutedEventArgs e)
@@ -40,7 +41,7 @@ namespace TripleDetection.Presentation.Views.Auth
         {
             var btn = sender as Button;
             if (btn == null) return;
-            var user = btn.DataContext as Data.Entities.User;
+            var user = btn.DataContext as Domain.Entities.User;
             if (user == null) return;
 
             ViewModel.OpenEditWindow(user);
@@ -50,7 +51,7 @@ namespace TripleDetection.Presentation.Views.Auth
         {
             var btn = sender as Button;
             if (btn == null) return;
-            var user = btn.DataContext as Data.Entities.User;
+            var user = btn.DataContext as Domain.Entities.User;
             if (user == null) return;
 
             var result = MessageBox.Show(
@@ -69,7 +70,7 @@ namespace TripleDetection.Presentation.Views.Auth
         {
             var btn = sender as Button;
             if (btn == null) return;
-            var user = btn.DataContext as Data.Entities.User;
+            var user = btn.DataContext as Domain.Entities.User;
             if (user == null) return;
 
             ViewModel.EnableUser(user.Username);
@@ -79,7 +80,7 @@ namespace TripleDetection.Presentation.Views.Auth
         {
             var btn = sender as Button;
             if (btn == null) return;
-            var user = btn.DataContext as Data.Entities.User;
+            var user = btn.DataContext as Domain.Entities.User;
             if (user == null) return;
 
             ViewModel.DisableUser(user.Username);
@@ -89,7 +90,7 @@ namespace TripleDetection.Presentation.Views.Auth
         {
             var btn = sender as Button;
             if (btn == null) return;
-            var user = btn.DataContext as Data.Entities.User;
+            var user = btn.DataContext as Domain.Entities.User;
             if (user == null) return;
 
             ViewModel.LockUser(user.Username);
@@ -99,7 +100,7 @@ namespace TripleDetection.Presentation.Views.Auth
         {
             var btn = sender as Button;
             if (btn == null) return;
-            var user = btn.DataContext as Data.Entities.User;
+            var user = btn.DataContext as Domain.Entities.User;
             if (user == null) return;
 
             ViewModel.UnlockUser(user.Username);

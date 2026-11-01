@@ -4,6 +4,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Domain.Repositories;
 using TripleDetection.Infrastructure.Exceptions;
@@ -16,7 +17,7 @@ public class SqliteRepository<T> : IRepository<T> where T : BaseEntity
 
     public SqliteRepository(TripleDetectionDbContext context)
     {
-        _connectionString = context.Database.GetConnectionString();
+        _connectionString = context.Database.GetDbConnection().ConnectionString;
     }
 
     protected string? ConnectionString => _connectionString;
@@ -52,7 +53,8 @@ public class SqliteRepository<T> : IRepository<T> where T : BaseEntity
         conn.Open();
         var columns = GetInsertColumns();
         var values = GetInsertValues(entity);
-        var sql = $"INSERT INTO {GetTableName()} ({string.Join(", ", columns)}) VALUES ({string.Join(", ", values.Select(c => "@" + c))})";
+        // GetInsertValues 返回的已是最终 SQL 片段（@参数名或字面量），不能再加前缀
+        var sql = $"INSERT INTO {GetTableName()} ({string.Join(", ", columns)}) VALUES ({string.Join(", ", values)})";
         using var cmd = new SqliteCommand(sql, conn);
         AddEntityParameters(cmd, entity);
         cmd.ExecuteNonQuery();
@@ -130,28 +132,53 @@ public class SqliteRepository<T> : IRepository<T> where T : BaseEntity
         {
             if (binary.NodeType == ExpressionType.Equal || binary.NodeType == ExpressionType.NotEqual)
             {
-                var left = Visit(binary.Left);
-                var right = Visit(binary.Right);
                 var op = binary.NodeType == ExpressionType.Equal ? "=" : "!=";
-                return $"({left} {op} '{EscapeValue(right)}')";
+                return $"({Visit(binary.Left)} {op} {Visit(binary.Right)})";
             }
             if (binary.NodeType == ExpressionType.AndAlso) return $"({Visit(binary.Left)} AND {Visit(binary.Right)})";
             if (binary.NodeType == ExpressionType.OrElse) return $"({Visit(binary.Left)} OR {Visit(binary.Right)})";
         }
-        if (expr is MemberExpression member) return GetColumnName(member.Member as PropertyInfo);
-        if (expr is ConstantExpression constant) return constant.Value?.ToString() ?? "NULL";
+        if (expr is MemberExpression member)
+        {
+            // T 的列属性 → 列名；闭包捕获的变量 → 求值后作为字面量
+            if (IsColumn(member)) return GetColumnName(member.Member as PropertyInfo);
+            return FormatValue(Evaluate(member));
+        }
+        if (expr is ConstantExpression constant) return FormatValue(constant.Value);
         if (expr is MethodCallExpression call && call.Method.Name == "Contains")
         {
             var obj = call.Object as MemberExpression;
-            var arg = call.Arguments[0] as ConstantExpression;
-            return $"{GetColumnName(obj?.Member as PropertyInfo)} LIKE '%{EscapeValue(arg.Value?.ToString())}%'";
+            string pattern;
+            if (call.Arguments[0] is ConstantExpression argConst)
+                pattern = EscapeValue(argConst.Value?.ToString());
+            else
+                pattern = EscapeValue(Evaluate(call.Arguments[0])?.ToString());
+            return $"{GetColumnName(obj?.Member as PropertyInfo)} LIKE '%{pattern}%'";
         }
         if (expr is UnaryExpression unary && unary.NodeType == ExpressionType.Not)
         {
-            var member = unary.Operand as MemberExpression;
-            return $"({GetColumnName(member?.Member as PropertyInfo)} = 0 OR {GetColumnName(member?.Member as PropertyInfo)} = FALSE)";
+            var operand = unary.Operand;
+            if (operand is MemberExpression notMember && IsColumn(notMember))
+                return $"({GetColumnName(notMember.Member as PropertyInfo)} = 0)";
+            var notValue = Evaluate(operand);
+            return notValue is bool b && b ? "1=0" : "1=1";
         }
         return "1=1";
+    }
+
+    private static bool IsColumn(MemberExpression member) =>
+        member.Expression is ParameterExpression p && p.Type == typeof(T);
+
+    private static object Evaluate(Expression expr) =>
+        Expression.Lambda(expr).Compile().DynamicInvoke();
+
+    private static string FormatValue(object value)
+    {
+        if (value == null) return "NULL";
+        if (value is bool b) return b ? "1" : "0";
+        if (value is string s) return $"'{EscapeValue(s)}'";
+        if (value is DateTime dt) return $"'{dt:yyyy-MM-dd HH:mm:ss}'";
+        return Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "NULL";
     }
 
     private List<T> ExecuteQuery(string sql, object[] _, List<SqliteParameter> extraParams = null)
@@ -193,6 +220,12 @@ public class SqliteRepository<T> : IRepository<T> where T : BaseEntity
             var value = reader.GetValue(i);
             if (prop.PropertyType == typeof(bool) && value is long l) prop.SetValue(entity, l != 0);
             else if (prop.PropertyType == typeof(DateTime?) || prop.PropertyType == typeof(DateTime)) prop.SetValue(entity, DateTime.Parse(value.ToString()!));
+            else if (value is long && prop.PropertyType != typeof(long))
+            {
+                var target = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+                if (target.IsEnum) prop.SetValue(entity, Enum.ToObject(target, (long)value));
+                else prop.SetValue(entity, Convert.ChangeType(value, target));
+            }
             else prop.SetValue(entity, value);
         }
         return entity;
@@ -200,6 +233,8 @@ public class SqliteRepository<T> : IRepository<T> where T : BaseEntity
 
     private string GetTableName()
     {
+        // 与 EF Core 配置保持一致（ProdTaskConfiguration → "Tasks"）
+        if (typeof(T) == typeof(ProdTask)) return "Tasks";
         var name = typeof(T).Name;
         if (name.EndsWith("y")) return name.Substring(0, name.Length - 1) + "ies";
         if (name.EndsWith("s")) return name + "es";
@@ -208,7 +243,7 @@ public class SqliteRepository<T> : IRepository<T> where T : BaseEntity
 
     private string GetColumnName(PropertyInfo prop) => prop?.Name ?? "";
 
-    private string EscapeValue(object value) => value?.ToString()?.Replace("'", "''") ?? "";
+    private static string EscapeValue(object value) => value?.ToString()?.Replace("'", "''") ?? "";
 
     private string[] GetInsertColumns() =>
         new[] { "CreateAt", "UpdateAt", "IsDeleted", "CreateBy", "UpdateBy" }
@@ -236,13 +271,15 @@ public class SqliteRepository<T> : IRepository<T> where T : BaseEntity
         {
             if (excludeKeys.Contains(prop.Name)) continue;
             var val = prop.GetValue(entity);
-            if (prop.PropertyType == typeof(bool)) val = (bool)val! ? 1 : 0;
+            if (prop.PropertyType.IsEnum) val = Convert.ToInt32(val);
+            else if (prop.PropertyType == typeof(bool)) val = (bool)val! ? 1 : 0;
             cmd.Parameters.AddWithValue("@" + prop.Name, val ?? DBNull.Value);
         }
     }
 
     private PropertyInfo[] GetTypeProperties() =>
         typeof(T).GetProperties()
-            .Where(p => p.Name != "Id" && p.Name != "CreateBy" && p.Name != "UpdateBy" &&
+            .Where(p => p.CanWrite &&
+                        p.Name != "Id" && p.Name != "CreateBy" && p.Name != "UpdateBy" &&
                         p.Name != "CreateAt" && p.Name != "UpdateAt" && p.Name != "IsDeleted").ToArray();
 }

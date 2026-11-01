@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -19,12 +20,13 @@ namespace TripleDetection.Presentation.Views.Detection
 
         public DetectionHistoryView()
         {
-            InitializeComponent();
-
+            // 在 InitializeComponent 之前赋值，防止 XAML 解析阶段的事件回调访问到未初始化的路径
             _dbPath = System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
                 "Data",
                 "tripledetection.db");
+
+            InitializeComponent();
 
             BindData();
         }

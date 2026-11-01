@@ -3,7 +3,8 @@ using System.Collections.ObjectModel;
 using Prism.Commands;
 using Prism.Events;
 using Prism.Mvvm;
-using Prism.Regions;
+// Prism 9 中 Prism.Regions 已重命名为 Prism.Navigation.Regions
+using Prism.Navigation.Regions;
 using TripleDetection.Application.Services;
 
 namespace TripleDetection.Presentation.ViewModels.Detection

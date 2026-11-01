@@ -15,6 +15,5 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(a => a.ObjectType).HasMaxLength(50);
         builder.Property(a => a.Details).HasMaxLength(1000);
         builder.Property(a => a.IpAddress).HasMaxLength(50);
-        builder.Ignore(a => a.User);
     }
 }

@@ -2,21 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Prism.Events;
-using VM.Core;
-using VM.PlatformSDKCS;
 using System.Drawing;
-using TripleDetection.Events;
-using TripleDetection.Models;
+using TripleDetection.Presentation.Events;
+using TripleDetection.Presentation.Models;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Application.Services;
-using GlobalVariableModuleCs;
 
 namespace TripleDetection.Application.VmServices
 {
-    public class VmIntegrationService
+#if VM_SDK
+using VM.Core;
+using VM.PlatformSDKCS;
+using GlobalVariableModuleCs;
+    /// <summary>
+    /// VisionMaster 4.x 真实检测引擎。仅在 VM_SDK 宏启用（SDK DLL 齐全）时编译。
+    /// </summary>
+    public class VmIntegrationService : IDetectionEngine
     {
         private VmProcedure _procedure;
-        private ImageStorageService _imageStorage;
         private bool _isSolutionLoad = false;
         private LoggingService _logService;
         private IDetectionRecordService _detectionRecordService;
@@ -25,11 +28,10 @@ namespace TripleDetection.Application.VmServices
         private int _currentProductId;
         private string _currentBatchNumber;
 
-        public event EventHandler<DetectionResult> OnDetectionResult;
+        public event EventHandler<DetectionResult> DetectionResult;
 
-        public VmIntegrationService(ImageStorageService imageStorage, LoggingService logService, IDetectionRecordService detectionRecordService, IEventAggregator eventAggregator = null)
+        public VmIntegrationService(LoggingService logService, IDetectionRecordService detectionRecordService, IEventAggregator eventAggregator = null)
         {
-            _imageStorage = imageStorage;
             _logService = logService;
             _detectionRecordService = detectionRecordService;
             _eventAggregator = eventAggregator;
@@ -80,11 +82,22 @@ namespace TripleDetection.Application.VmServices
             }
         }
 
-        public void SetCurrentTaskContext(int taskId, int productId, string batchNumber)
+        public void SetCurrentTaskContext(int taskId, int productId, string batchNumber, DateTime? productionDate, DateTime? expirationDate)
         {
             _currentTaskId = taskId;
             _currentProductId = productId;
             _currentBatchNumber = batchNumber ?? "";
+        }
+
+        public bool IsSolutionLoaded => _isSolutionLoad;
+
+        public bool HasProcedure => _procedure != null;
+
+        public string GetGlobalVariableString(string name)
+        {
+            if (!_isSolutionLoad) return null;
+            var gvTool = VmSolution.Instance["全局变量1"] as GlobalVariableModuleTool;
+            return gvTool?.GetGlobalVar(name);
         }
 
         public VmProcedure GetProcedure()
@@ -173,8 +186,8 @@ namespace TripleDetection.Application.VmServices
                         // Publish via EventAggregator (preferred)
                         _eventAggregator?.GetEvent<DetectionResultEvent>().Publish(result);
 
-                        // Legacy event (backward compatibility)
-                        OnDetectionResult?.Invoke(this, result);
+                        // 引擎接口事件
+                        DetectionResult?.Invoke(this, result);
 
                         // 保存 DetectionRecord（非阻塞，异常吞噬）
                         try
@@ -248,4 +261,5 @@ namespace TripleDetection.Application.VmServices
             };
         }
     }
+#endif
 }

@@ -47,7 +47,8 @@ public partial class App : PrismApplication
 
     protected override void RegisterTypes(IContainerRegistry containerRegistry)
     {
-        var container = containerRegistry as IContainer;
+        // Prism 9：containerRegistry 是 DryIocContainerExtension，底层 DryIoc 容器通过 Instance 属性获取
+        var container = (containerRegistry as Prism.Container.DryIoc.DryIocContainerExtension)?.Instance;
         if (container == null) return;
 
         var dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "tripledetection.db");
@@ -56,6 +57,8 @@ public partial class App : PrismApplication
         // Infrastructure - Connection and Repository Factory
         container.RegisterInstance<IDbConnectionFactory>(new SqliteConnectionFactory(connectionString));
         container.RegisterInstance<IRepositoryFactory>(new SqliteRepositoryFactory(connectionString));
+        // DbContext 供各仓储构造函数注入（仓储仅使用其连接字符串，单实例安全）
+        container.RegisterInstance(new TripleDetectionDbContext(connectionString));
 
         // Infrastructure - Repositories (transient)
         container.Register(typeof(IRepository<>), typeof(SqliteRepository<>), Reuse.Transient);
@@ -67,12 +70,8 @@ public partial class App : PrismApplication
         var eventAggregator = Container.Resolve<IEventAggregator>();
         container.RegisterInstance(new LoggingService(logPath, eventAggregator));
 
-        // Image Storage (singleton)
-        var okDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "OK");
-        var ngDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images", "NG");
-        container.RegisterInstance(new ImageStorageService(okDir, ngDir));
-
         // Application Services (transient)
+        container.Register<IPasswordHashService, PasswordHashService>(Reuse.Transient);
         container.Register<IUserService, UserService>(Reuse.Transient);
         container.Register<IProductService, ProductService>(Reuse.Transient);
         container.Register<ITaskService, TaskService>(Reuse.Transient);
@@ -84,8 +83,12 @@ public partial class App : PrismApplication
         container.Register<DeviceControlSettingsService>(Reuse.Transient);
         container.Register<SettingsSyncService>(Reuse.Transient);
 
-        // VM Integration (singleton)
-        container.Register<VmIntegrationService>(Reuse.Singleton);
+        // 检测引擎 (singleton)：有 VisionMaster SDK 时用真实引擎，否则用模拟引擎
+#if VM_SDK
+        container.Register<IDetectionEngine, VmIntegrationService>(Reuse.Singleton);
+#else
+        container.Register<IDetectionEngine, MockDetectionEngine>(Reuse.Singleton);
+#endif
 
         // ViewModels (transient)
         container.Register<MainViewModel>(Reuse.Transient);
@@ -99,16 +102,16 @@ public partial class App : PrismApplication
         container.Register<TaskEditViewModel>(Reuse.Transient);
         container.Register<SettingsShellViewModel>(Reuse.Transient);
 
-        // Navigation
-        container.RegisterTypeForNavigation<DashboardView>("Dashboard");
-        container.RegisterTypeForNavigation<DetectionView>("Detection");
-        container.RegisterTypeForNavigation<ProductListView>("Products");
-        container.RegisterTypeForNavigation<TaskListView>("Tasks");
-        container.RegisterTypeForNavigation<LogsView>("Logs");
-        container.RegisterTypeForNavigation<SettingsView>("Settings");
-        container.RegisterTypeForNavigation<UserManagementView>("UserManagement");
-        container.RegisterTypeForNavigation<AuditLogView>("AuditLog");
-        container.RegisterTypeForNavigation<DetectionHistoryView>("DetectionHistory");
+        // Navigation（Prism 9 移除了 RegisterTypeForNavigation，改用 RegisterForNavigation 扩展方法）
+        containerRegistry.RegisterForNavigation<DashboardView>("Dashboard");
+        containerRegistry.RegisterForNavigation<DetectionView>("Detection");
+        containerRegistry.RegisterForNavigation<ProductListView>("Products");
+        containerRegistry.RegisterForNavigation<TaskListView>("Tasks");
+        containerRegistry.RegisterForNavigation<LogsView>("Logs");
+        containerRegistry.RegisterForNavigation<SettingsView>("Settings");
+        containerRegistry.RegisterForNavigation<UserManagementView>("UserManagement");
+        containerRegistry.RegisterForNavigation<AuditLogView>("AuditLog");
+        containerRegistry.RegisterForNavigation<DetectionHistoryView>("DetectionHistory");
 
         // MainWindow as singleton
         container.Register<MainWindow>(Reuse.Singleton);

@@ -21,12 +21,14 @@ namespace TripleDetection.Presentation.Views.Audit
 
         public AuditLogView()
         {
-            InitializeComponent();
-
+            // 必须在 InitializeComponent 之前赋值：XAML 中 cmbPageSize 的 SelectedIndex="0"
+            // 会在解析阶段触发 SelectionChanged -> BindData()，此时 _dbPath 必须已就绪
             _dbPath = System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
                 "Data",
                 "tripledetection.db");
+
+            InitializeComponent();
 
             LoadUsers();
             BindData();

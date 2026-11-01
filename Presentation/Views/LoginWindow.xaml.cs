@@ -1,3 +1,4 @@
+using TripleDetection.Presentation;
 using System;
 using System.IO;
 using System.Windows;
@@ -17,7 +18,7 @@ namespace TripleDetection.Presentation.Views
         {
             InitializeComponent();
 
-            _viewModel = new LoginViewModel();
+            _viewModel = ViewResolver.Resolve<LoginViewModel>();
             DataContext = _viewModel;
 
             _viewModel.LoginSucceeded += OnLoginSucceeded;
@@ -64,7 +65,7 @@ namespace TripleDetection.Presentation.Views
                 SystemNameText.Text = systemName;
         }
 
-        private void OnLoginSucceeded(Data.Entities.User user)
+        private void OnLoginSucceeded(Domain.Entities.User user)
         {
             this.DialogResult = true;
             this.Close();
@@ -127,7 +128,7 @@ namespace TripleDetection.Presentation.Views
         private void SubmitLogin()
         {
             _viewModel.Username = UsernameTextBox.Text;
-            _viewModel.Password = PasswordBox.Password;
+            _viewModel.Password = _isPasswordVisible ? PasswordVisibleTextBox.Text : PasswordBox.Password;
 
             if (_viewModel.LoginCommand.CanExecute(null))
                 _viewModel.LoginCommand.Execute(null);

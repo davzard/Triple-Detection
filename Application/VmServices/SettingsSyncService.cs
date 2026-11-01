@@ -1,6 +1,7 @@
 using System;
-using TripleDetection.Models;
+#if VM_SDK
 using iMVS_6000PlatformSDKCS.SyncPlatformSDKCS;
+#endif
 
 namespace TripleDetection.Application.VmServices
 {
@@ -13,6 +14,11 @@ namespace TripleDetection.Application.VmServices
             if (deviceSettings == null)
                 throw new ArgumentNullException(nameof(deviceSettings));
 
+#if !VM_SDK
+            // 无 VisionMaster SDK：无法同步到 VM，仅提示
+            System.Diagnostics.Debug.WriteLine("[SettingsSync] 当前构建未包含 VisionMaster SDK，跳过同步");
+            return true;
+#else
             try
             {
                 var pfsync = new ImvsSdkPFSync();
@@ -45,6 +51,7 @@ namespace TripleDetection.Application.VmServices
             {
                 throw new Exception($"同步到VisionMaster失败: {ex.Message}", ex);
             }
+#endif
         }
     }
 }

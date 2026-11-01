@@ -1,3 +1,4 @@
+using TripleDetection.Presentation;
 using System.Windows;
 using System.Windows.Controls;
 using TripleDetection.Presentation.ViewModels;
@@ -13,7 +14,7 @@ namespace TripleDetection.Presentation.Views.Production
         public TaskListView()
         {
             InitializeComponent();
-            _viewModel = new TaskListViewModel();
+            _viewModel = ViewResolver.Resolve<TaskListViewModel>();
             DataContext = _viewModel;
             Loaded += (s, e) => _viewModel.Search();
         }

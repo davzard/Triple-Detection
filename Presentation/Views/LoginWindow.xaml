@@ -15,11 +15,11 @@
 
         <!-- 登录按钮文字转换器 -->
         <local:LoginButtonTextConverter x:Key="LoginButtonTextConverter"
-                                        xmlns:local="clr-namespace:TripleDetection.Converters"/>
+                                        xmlns:local="clr-namespace:TripleDetection.Presentation.Converters"/>
 
         <!-- 字符串转可见性转换器 -->
         <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"
-                                            xmlns:local="clr-namespace:TripleDetection.Converters"/>
+                                            xmlns:local="clr-namespace:TripleDetection.Presentation.Converters"/>
     </Window.Resources>
 
     <Window.Triggers>
