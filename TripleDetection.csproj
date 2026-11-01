@@ -24,6 +24,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 测试项目位于本目录子文件夹，排除其源码避免被主项目（含 WPF 临时编译工程）的默认 glob 拾取 -->
+    <Compile Remove="TripleDetection.Tests\**\*.cs" />
+    <None Remove="TripleDetection.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Prism.DryIoc" Version="9.0.537" />
     <!-- Prism.Wpf 提供 Prism.Regions / PrismApplication 等 WPF 专用类型 -->
     <PackageReference Include="Prism.Wpf" Version="9.0.537" />

@@ -68,7 +68,12 @@ public partial class App : PrismApplication
         // Logging Service (singleton)
         var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
         var eventAggregator = Container.Resolve<IEventAggregator>();
-        container.RegisterInstance(new LoggingService(logPath, eventAggregator));
+        var loggingService = new LoggingService(logPath, eventAggregator);
+        container.RegisterInstance(loggingService);
+
+        // 工位上下文（单例：顺序号进程内计数）与图片归档器（生产级命名，见 ImageArchiver）
+        container.Register<StationContext>(Reuse.Singleton);
+        container.RegisterInstance(new ImageArchiver(eventAggregator, loggingService));
 
         // Application Services (transient)
         container.Register<IPasswordHashService, PasswordHashService>(Reuse.Transient);

@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TripleDetection", "TripleDetection.csproj", "{9A880B18-1FA5-4179-833D-50B56FD893E9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TripleDetection.Tests", "TripleDetection.Tests\TripleDetection.Tests.csproj", "{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{9A880B18-1FA5-4179-833D-50B56FD893E9}.Release|x64.Build.0 = Release|Any CPU
 		{9A880B18-1FA5-4179-833D-50B56FD893E9}.Release|x86.ActiveCfg = Release|Any CPU
 		{9A880B18-1FA5-4179-833D-50B56FD893E9}.Release|x86.Build.0 = Release|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Debug|x64.Build.0 = Debug|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Debug|x86.Build.0 = Debug|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Release|x64.ActiveCfg = Release|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Release|x64.Build.0 = Release|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Release|x86.ActiveCfg = Release|Any CPU
+		{604F0E88-87D0-4D1B-A857-F3DFA0C59A01}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

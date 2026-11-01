@@ -24,17 +24,20 @@ using GlobalVariableModuleCs;
         private LoggingService _logService;
         private IDetectionRecordService _detectionRecordService;
         private IEventAggregator _eventAggregator;
+        private StationContext _stationContext;
         private int _currentTaskId;
         private int _currentProductId;
         private string _currentBatchNumber;
 
         public event EventHandler<DetectionResult> DetectionResult;
 
-        public VmIntegrationService(LoggingService logService, IDetectionRecordService detectionRecordService, IEventAggregator eventAggregator = null)
+        // 注：VM 回调取图存盘（ImageArchiver）在后续阶段接通，届时再注入 ImageArchiver
+        public VmIntegrationService(LoggingService logService, IDetectionRecordService detectionRecordService, IEventAggregator eventAggregator = null, StationContext stationContext = null)
         {
             _logService = logService;
             _detectionRecordService = detectionRecordService;
             _eventAggregator = eventAggregator;
+            _stationContext = stationContext;
             VmSolution.OnWorkStatusEvent += VmSolution_OnWorkStatusEvent;
         }
 
@@ -180,7 +183,8 @@ using GlobalVariableModuleCs;
                     _logService?.Log($"[Callback] strResult={strResult}");
                     if (strResult != null)
                     {
-                        var result = ParseResult(strResult);
+                        // 协议解析（v1 CSV / v2 JSON 自动路由），解析失败返回 NG 兜底
+                        var result = ResultParserRegistry.Parse(strResult);
                         result.ElapsedMs = _stopwatch.ElapsedMilliseconds;
 
                         // Publish via EventAggregator (preferred)
@@ -202,7 +206,14 @@ using GlobalVariableModuleCs;
                                 ExpirationDate = result.ExpirationDate,
                                 ImagePath = result.ImagePath,
                                 ElapsedMs = result.ElapsedMs,
-                                DetectionTime = DateTime.Now
+                                DetectionTime = DateTime.Now,
+                                NgReason = result.NgReason,
+                                NgDetail = result.NgDetail,
+                                Confidence = result.Confidence,
+                                CameraId = result.CameraId,
+                                OperatorId = TripleDetection.Domain.SessionManager.CurrentUserId,
+                                StationCode = _stationContext?.GetStationCode() ?? "UNKNOWN",
+                                SequenceNo = _stationContext?.NextSequence() ?? 0
                             };
                             _detectionRecordService?.Save(record);
                         }
@@ -214,51 +225,18 @@ using GlobalVariableModuleCs;
                 }
                 catch (Exception ex)
                 {
+                    // VM 回调异常必须落日志（此前仅 Debug.WriteLine，生产环境不可见）
                     dynamic vmEx = ex;
                     if (vmEx.errorCode != null)
-                        Debug.WriteLine($"VmIntegrationService VM Error: 0x{vmEx.errorCode:X}");
+                        _logService?.Log($"[VM Error] 0x{vmEx.errorCode:X} {ex.Message}", "ERROR");
                     else
-                        Debug.WriteLine($"VmIntegrationService Error: {ex.Message}");
+                        _logService?.Log($"[VM Error] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}", "ERROR");
                 }
                 finally
                 {
                     _stopwatch.Restart();
                 }
             }
-        }
-
-        internal static DetectionResult ParseResult(string strResult)
-        {
-            if (string.IsNullOrEmpty(strResult))
-            {
-                return new DetectionResult
-                {
-                    IsOK = false,
-                    ErrorMessage = "Empty result string",
-                    DetectionTime = DateTime.Now
-                };
-            }
-
-            var parts = strResult.Trim().Split(',');
-
-            if (parts.Length < 4)
-            {
-                return new DetectionResult
-                {
-                    IsOK = false,
-                    ErrorMessage = $"Invalid result format: expected 4 fields, got {parts.Length}",
-                    DetectionTime = DateTime.Now
-                };
-            }
-
-            return new DetectionResult
-            {
-                IsOK = parts[0].Trim() == "1",
-                BatchNumber = parts[1].Trim(),
-                ProductionDate = parts[2].Trim(),
-                ExpirationDate = parts[3].Trim(),
-                DetectionTime = DateTime.Now
-            };
         }
     }
 #endif

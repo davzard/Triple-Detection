@@ -9,9 +9,9 @@ Triple-Detection (Apache 2.0): WPF visual inspection system for packaging lines 
 ## Project Structure (single csproj, DDD folders)
 
 - **TripleDetection.csproj** — the only project; `net8.0-windows`, **C# 12.0**, x64, WPF + WinForms
-- `Domain/` — entities (`DetectionRecord`, `Task`, `Product`, `User`…), enums, query models
-- `Application/` — services & detection engines: `VmServices/` (VmIntegrationService, MockDetectionEngine), `Services/` (LoggingService, user/task/product/detection-record services, settings services)
-- `Infrastructure/` — persistence (SqliteRepository<T> is reflection-driven; DatabaseInitializer creates the schema via raw SQL), JsonHelper
+- `Domain/` — entities (`DetectionRecord`, `Task`, `Product`, `User`…), enums (`NgReason`…), query models
+- `Application/` — services & detection engines: `VmServices/` (VmIntegrationService, MockDetectionEngine, ImageArchiver, result parsers), `Services/` (LoggingService, user/task/product/detection-record services, settings services)
+- `Infrastructure/` — persistence (SqliteRepository<T> is reflection-driven; DatabaseInitializer with versioned migrations), JsonHelper
 - `Presentation/` — WPF UI (Prism 9 modules/views/viewmodels), `App.xaml.cs` holds all DI registrations
 
 ## Tech Stack
@@ -37,13 +37,24 @@ dotnet build TripleDetection.sln -c Debug
 - `Presentation/Views/App/DashboardView.xaml(.cs)` — dashboard statistics
 - `Application/VmServices/VmIntegrationService.cs` — VisionMaster SDK wrapper (VM_SDK only)
 - `Application/VmServices/MockDetectionEngine.cs` — no-hardware simulation of the full detection chain
-- `Infrastructure/Persistence/DatabaseInitializer.cs` — schema initialization (raw SQL)
+- `Application/VmServices/ResultParserRegistry.cs` — result protocol routing: v1 CSV / v2 JSON (see design doc §3.3)
+- `Application/VmServices/ImageArchiver.cs` — image archive: `Images/{yyyyMMdd}/{OK|NG}/{时间}_{工位}_{任务}_{批号}_{序号}_{OK|NG}.png`
+- `Infrastructure/Persistence/DatabaseInitializer.cs` — versioned schema migrations (SchemaMigrations table); new migrations are appended, never edited
+- `Domain/Enums/Enums.cs` — `NgReason` NG defect classification
 
 ## Database Conventions
 
 - Schema is managed by raw SQL in `DatabaseInitializer` (EF configurations exist for model consistency but migrations are not EF-migration-based)
 - `SqliteRepository<T>` inserts/maps all public writable properties by name — new entity fields flow through automatically once the DB column exists
-- All queries use `SELECT *`; adding columns is safe once the corresponding DB column exists
+- All queries use `SELECT *`; adding columns is safe, but always add a versioned migration for the column
+
+## Production Readiness (ongoing)
+
+`docs/specs/2026-11-01-production-readiness-design.md` is the governing design doc for the factory-production retrofit (PLC/IO, line state machine, MES, RBAC, SPC, deployment). Phase 0 (foundation) is implemented; follow its conventions:
+
+- NG records must carry `NgReason` + `NgDetail`; OK records use `NgReason.None`
+- No swallowed exceptions in detection paths — log with level (`LoggingService.Log(msg, "ERROR")`); only the logger itself may fail silently
+- Detection path must never block on I/O (images, DB, MES)
 
 ## VisionMaster SDK
 

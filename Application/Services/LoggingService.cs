@@ -40,9 +40,13 @@ public class LoggingService
         catch { /* skip if inaccessible */ }
     }
 
-    public void Log(string message)
+    /// <summary>
+    /// 写日志。level 取值 INFO / WARN / ERROR。
+    /// 注意：日志器自身故障必须静默（catch 不抛出），否则会在异常处理路径上二次抛错。
+    /// </summary>
+    public void Log(string message, string level = "INFO")
     {
-        var entry = new LogEntry { Timestamp = DateTime.Now, Message = message };
+        var entry = new LogEntry { Timestamp = DateTime.Now, Message = message, Level = level };
         _eventAggregator?.GetEvent<LogAddedEvent>()?.Publish(entry);
         OnLogAdded?.Invoke(this, entry);
         Task.Run(() => SaveLog(entry));
@@ -54,7 +58,7 @@ public class LoggingService
         {
             if (!Directory.Exists(_logPath)) Directory.CreateDirectory(_logPath);
             var filename = Path.Combine(_logPath, "app.log");
-            var line = $"{entry.Timestamp:yyyy-MM-dd HH:mm:ss:ffff}\t{entry.Message}";
+            var line = $"{entry.Timestamp:yyyy-MM-dd HH:mm:ss:ffff}\t[{entry.Level ?? "INFO"}]\t{entry.Message}";
             lock (_lockObj) { File.AppendAllText(filename, line + Environment.NewLine); }
         }
         catch { /* swallow logging errors */ }
@@ -72,6 +76,7 @@ public class LogEntry
 {
     public DateTime Timestamp { get; set; }
     public string Message { get; set; }
+    public string Level { get; set; } = "INFO";
 }
 
 // Placeholder - the actual LogAddedEvent will be defined in Presentation layer

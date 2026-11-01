@@ -1,17 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
 using TripleDetection.Application.Services;
 using TripleDetection.Domain.Entities;
+using TripleDetection.Domain.Enums;
 using TripleDetection.Presentation.Models;
 
 namespace TripleDetection.Application.VmServices
 {
     /// <summary>
     /// 模拟检测引擎：在没有 VisionMaster SDK / 相机 / 方案文件时，
-    /// 模拟"加载方案 → 运行 → 回调 → 记录入库"链路，
+    /// 模拟完整的"加载方案 → 运行 → 回调解析 → 图像归档 → 记录入库"链路，
     /// 便于在无硬件环境下开发与演示。
     /// 结果回调在后台线程触发，与真实 SDK 的回调线程模型一致。
     /// </summary>
@@ -20,8 +22,16 @@ namespace TripleDetection.Application.VmServices
         private const double OkProbability = 0.85;
         private const int ContinuousIntervalMs = 2000;
 
+        private static readonly NgReason[] NgReasonPool =
+        {
+            NgReason.BnMismatch, NgReason.MfgMismatch, NgReason.ExpMismatch,
+            NgReason.BnMissing, NgReason.MfgMissing, NgReason.ExpMissing, NgReason.OcrFailed
+        };
+
         private readonly LoggingService _logService;
         private readonly IDetectionRecordService _detectionRecordService;
+        private readonly ImageArchiver _imageArchiver;
+        private readonly StationContext _stationContext;
         private readonly Random _random = new Random();
         private readonly object _lock = new object();
 
@@ -43,10 +53,12 @@ namespace TripleDetection.Application.VmServices
         public bool HasProcedure => _isSolutionLoaded && !string.IsNullOrEmpty(_currentProcedureName);
         public bool IsContinuousRun => _continuousTimer != null;
 
-        public MockDetectionEngine(LoggingService logService, IDetectionRecordService detectionRecordService)
+        public MockDetectionEngine(LoggingService logService, IDetectionRecordService detectionRecordService, ImageArchiver imageArchiver, StationContext stationContext)
         {
             _logService = logService;
             _detectionRecordService = detectionRecordService;
+            _imageArchiver = imageArchiver;
+            _stationContext = stationContext;
         }
 
         public void LoadSolution(string solPath)
@@ -103,15 +115,38 @@ namespace TripleDetection.Application.VmServices
 
                     sw.Stop();
 
+                    // 顺序号与工位码：图片文件名与数据库记录共用同一组值
+                    int seq = _stationContext?.NextSequence() ?? 0;
+                    string station = _stationContext?.GetStationCode() ?? "UNKNOWN";
+
+                    // 模拟 NG 缺陷分类与置信度（Phase 0 演示用；真实值来自 v2 协议）
+                    var ngReason = isOK ? NgReason.None : NgReasonPool[_random.Next(NgReasonPool.Length)];
+                    double confidence = 0.80 + _random.NextDouble() * 0.19;
+
+                    string imagePath = string.Empty;
+                    try
+                    {
+                        using var bmp = CreateMockImage(isOK, batch, mfg, exp);
+                        imagePath = _imageArchiver?.SaveImage(bmp, isOK, _currentTaskId, seq, batch, station) ?? string.Empty;
+                    }
+                    catch (Exception imgEx)
+                    {
+                        _logService?.Log($"[Mock] 图像保存失败: {imgEx.Message}", "ERROR");
+                    }
+
                     var result = new DetectionResult
                     {
                         IsOK = isOK,
                         BatchNumber = batch,
                         ProductionDate = mfg,
                         ExpirationDate = exp,
-                        ImagePath = string.Empty,
+                        ImagePath = imagePath,
                         DetectionTime = DateTime.Now,
-                        ElapsedMs = sw.ElapsedMilliseconds
+                        ElapsedMs = sw.ElapsedMilliseconds,
+                        NgReason = ngReason,
+                        NgDetail = isOK ? string.Empty : DescribeNg(ngReason),
+                        Confidence = Math.Round(confidence, 3),
+                        CameraId = "CAM1"
                     };
 
                     // 保存 DetectionRecord（与 VmIntegrationService 一致，非阻塞，异常吞噬）
@@ -125,15 +160,22 @@ namespace TripleDetection.Application.VmServices
                             IsOK = isOK,
                             ProductionDate = mfg,
                             ExpirationDate = exp,
-                            ImagePath = string.Empty,
+                            ImagePath = imagePath,
                             ElapsedMs = sw.ElapsedMilliseconds,
-                            DetectionTime = DateTime.Now
+                            DetectionTime = DateTime.Now,
+                            NgReason = ngReason,
+                            NgDetail = result.NgDetail,
+                            Confidence = result.Confidence,
+                            CameraId = result.CameraId,
+                            OperatorId = TripleDetection.Domain.SessionManager.CurrentUserId,
+                            StationCode = station,
+                            SequenceNo = seq
                         };
                         _detectionRecordService?.Save(record);
                     }
                     catch (Exception ex)
                     {
-                        _logService?.Log($"[Mock] DetectionRecord 保存失败: {ex.Message}");
+                        _logService?.Log($"[Mock] DetectionRecord 保存失败: {ex.Message}", "ERROR");
                     }
 
                     _logService?.Log($"[Mock] 检测完成: {(isOK ? "OK" : "NG")} | 批号={batch} | 耗时={sw.ElapsedMilliseconds}ms");
@@ -187,6 +229,46 @@ namespace TripleDetection.Application.VmServices
             {
                 return _globalVariables.TryGetValue(name, out var v) ? v : null;
             }
+        }
+
+        /// <summary>NG 缺陷分类的中文描述（模拟数据用）</summary>
+        private static string DescribeNg(NgReason reason)
+        {
+            return reason switch
+            {
+                NgReason.BnMismatch => "批号不匹配（模拟）",
+                NgReason.MfgMismatch => "生产日期不匹配（模拟）",
+                NgReason.ExpMismatch => "有效期不匹配（模拟）",
+                NgReason.BnMissing => "批号漏印（模拟）",
+                NgReason.MfgMissing => "生产日期漏印（模拟）",
+                NgReason.ExpMissing => "有效期漏印（模拟）",
+                NgReason.OcrFailed => "OCR 识别失败（模拟）",
+                _ => reason.ToString()
+            };
+        }
+
+        /// <summary>生成一张带 OK/NG 标识的模拟检测图像</summary>
+        private static Bitmap CreateMockImage(bool isOK, string batch, string mfg, string exp)
+        {
+            var bmp = new Bitmap(640, 480);
+            using var g = Graphics.FromImage(bmp);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.Clear(Color.White);
+
+            using var titleFont = new Font("Arial", 56, FontStyle.Bold);
+            using var titleBrush = new SolidBrush(isOK ? Color.FromArgb(0, 160, 0) : Color.FromArgb(220, 0, 0));
+            g.DrawString(isOK ? "OK" : "NG", titleFont, titleBrush, 250, 40);
+
+            using var infoFont = new Font("Arial", 16);
+            using var infoBrush = new SolidBrush(Color.Black);
+            g.DrawString($"批次: {batch}", infoFont, infoBrush, 40, 180);
+            g.DrawString($"生产日期: {mfg}", infoFont, infoBrush, 40, 220);
+            g.DrawString($"有效期至: {exp}", infoFont, infoBrush, 40, 260);
+            g.DrawString($"[模拟检测] {DateTime.Now:yyyy-MM-dd HH:mm:ss}", infoFont, infoBrush, 40, 300);
+
+            using var frame = new Pen(Color.Gray, 2);
+            g.DrawRectangle(frame, 10, 10, 620, 460);
+            return bmp;
         }
     }
 }

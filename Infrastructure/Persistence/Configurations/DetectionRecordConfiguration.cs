@@ -15,5 +15,10 @@ public class DetectionRecordConfiguration : IEntityTypeConfiguration<DetectionRe
         builder.Property(d => d.ExpirationDate).HasMaxLength(50);
         builder.Property(d => d.ImagePath).HasMaxLength(500);
         builder.Property(d => d.TaskId).IsRequired();
+        // Phase 0 追溯字段
+        builder.Property(d => d.NgReason).HasConversion<int>();
+        builder.Property(d => d.NgDetail).HasMaxLength(500);
+        builder.Property(d => d.StationCode).HasMaxLength(50);
+        builder.Property(d => d.CameraId).HasMaxLength(20);
     }
 }

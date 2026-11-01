@@ -59,7 +59,7 @@ namespace TripleDetection.Presentation.Views.App
             catch (Exception ex)
             {
                 // 统计加载失败时保留占位值，不阻塞页面渲染；但必须留痕
-                _logService?.Log($"[Dashboard] 统计加载失败: {ex.Message}");
+                _logService?.Log($"[Dashboard] 统计加载失败: {ex.Message}", "ERROR");
             }
         }
 
