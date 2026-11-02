@@ -52,6 +52,12 @@ public class LoggingService
         Task.Run(() => SaveLog(entry));
     }
 
+    public void LogInfo(string category, string message) => Log($"[{category}] {message}", "INFO");
+
+    public void LogWarn(string category, string message) => Log($"[{category}] {message}", "WARN");
+
+    public void LogError(string category, string message) => Log($"[{category}] {message}", "ERROR");
+
     private void SaveLog(LogEntry entry)
     {
         try
