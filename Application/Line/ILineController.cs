@@ -20,6 +20,8 @@ namespace TripleDetection.Application.Line
         void StartShift();
         /// <summary>启动自动运行：Ready/Paused → Running</summary>
         void StartAutoRun();
+        /// <summary>停止自动运行：Running → Ready（免鼠标 F1；班次保持）</summary>
+        void StopAutoRun();
         /// <summary>暂停：Running → Paused</summary>
         void Pause();
         /// <summary>报警复位：Alarm → Ready</summary>

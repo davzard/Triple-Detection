@@ -31,6 +31,7 @@ namespace TripleDetection.Infrastructure.Device
         public volatile int LastRejectDelayMs;
         public volatile int LastRejectDurationMs;
         public volatile int LastLineStopAlarmCode;
+        public volatile int LastAlarmCode;
         public volatile int LastStationStatus;
         public volatile int TriggerCount;
 
@@ -65,7 +66,15 @@ namespace TripleDetection.Infrastructure.Device
         public Task WriteLineStopAsync(int alarmCode, CancellationToken ct = default)
         {
             LastLineStopAlarmCode = alarmCode;
+            LastAlarmCode = alarmCode; // 与真实网关一致：LINE_STOP 同时把报警码写入安灯寄存器
             _logService?.LogWarn("PLC", $"Mock PLC 收到产线停机命令：报警码 {alarmCode}");
+            return Task.CompletedTask;
+        }
+
+        public Task WriteAlarmCodeAsync(int alarmCode, CancellationToken ct = default)
+        {
+            LastAlarmCode = alarmCode;
+            _logService?.LogInfo("PLC", $"Mock PLC 收到安灯报警码：{alarmCode}");
             return Task.CompletedTask;
         }
 

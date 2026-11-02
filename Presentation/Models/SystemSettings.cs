@@ -11,5 +11,8 @@ namespace TripleDetection.Presentation.Models
         public string DbBackupRoot { get; set; } = @"D:\Database\Backup";
         public int ImageRetentionCount { get; set; } = 1000;
         public bool AutoCleanImages { get; set; } = true;
+        // M8 HMI 声音（设计文档 §3.8）
+        public bool SoundMuted { get; set; } = false;
+        public int SoundVolume { get; set; } = 80;
     }
 }

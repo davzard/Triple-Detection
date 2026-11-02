@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using TripleDetection.Application.Line;
 using TripleDetection.Application.Security;
 using TripleDetection.Application.SettingsServices;
 using TripleDetection.Presentation;
@@ -36,6 +37,8 @@ namespace TripleDetection.Presentation.Views.Settings
             txtDbBackupRoot.Text = settings.DbBackupRoot;
             txtImageRetentionCount.Text = settings.ImageRetentionCount.ToString();
             chkAutoCleanImages.IsChecked = settings.AutoCleanImages;
+            chkSoundMuted.IsChecked = settings.SoundMuted;
+            txtSoundVolume.Text = settings.SoundVolume.ToString();
 
             // Set log save method
             foreach (ComboBoxItem item in cboLogSaveMethod.Items)
@@ -104,10 +107,17 @@ namespace TripleDetection.Presentation.Views.Settings
                     ProductionLine = txtProductionLine.Text.Trim(),
                     DbBackupRoot = txtDbBackupRoot.Text.Trim(),
                     ImageRetentionCount = int.TryParse(txtImageRetentionCount.Text, out int imgCount) ? imgCount : 1000,
-                    AutoCleanImages = chkAutoCleanImages.IsChecked ?? true
+                    AutoCleanImages = chkAutoCleanImages.IsChecked ?? true,
+                    SoundMuted = chkSoundMuted.IsChecked ?? false,
+                    SoundVolume = int.TryParse(txtSoundVolume.Text, out int soundVol) ? soundVol : 80
                 };
 
                 _service.Save(settings);
+
+                // M8：立即应用声音设置到运行中的声音服务
+                var hmiSound = ViewResolver.TryResolve<HmiSoundService>();
+                hmiSound?.ApplySettings(settings.SoundMuted, settings.SoundVolume);
+
                 MessageBox.Show("保存成功", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (System.Exception ex)

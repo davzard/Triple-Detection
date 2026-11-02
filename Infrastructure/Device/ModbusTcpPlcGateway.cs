@@ -106,6 +106,9 @@ namespace TripleDetection.Infrastructure.Device
             await WriteSingleAsync(_map.LineStopOffset, 1, "LINE_STOP");
         }
 
+        public Task WriteAlarmCodeAsync(int alarmCode, CancellationToken ct = default)
+            => WriteSingleAsync(_map.AlarmCodeOffset, (ushort)alarmCode, "ALARM_CODE");
+
         public Task WriteStationStatusAsync(int status, CancellationToken ct = default)
             => WriteSingleAsync(_map.StationStatusOffset, (ushort)status, "STATION_STATUS");
 

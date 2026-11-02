@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Prism.Commands;
@@ -13,10 +14,12 @@ using Prism.Navigation.Regions;
 using TripleDetection.Application.Line;
 using TripleDetection.Application.Security;
 using TripleDetection.Application.Services;
+using TripleDetection.Application.VmServices;
 using TripleDetection.Infrastructure.Device;
 using TripleDetection.Presentation.Events;
 using TripleDetection.Presentation.ViewModels;
 using TripleDetection.Presentation.ViewModels.Detection;
+using TripleDetection.Presentation.Views.Production;
 
 namespace TripleDetection.Presentation.Views.App
 {
@@ -33,6 +36,7 @@ namespace TripleDetection.Presentation.Views.App
 
         private bool _isNavExpanded = true;
         private readonly Dictionary<string, Button> _navButtons = new Dictionary<string, Button>();
+        private BigResultWindow _bigResultWindow;
 
         public MainWindow(MainViewModel viewModel, IRegionManager regionManager, LoggingService logService,
             IEventAggregator eventAggregator, ILineController lineController, IPlcGateway plcGateway,
@@ -101,6 +105,71 @@ namespace TripleDetection.Presentation.Views.App
             btnNavSettings.Visibility = authz.Can(AuthorizationAction.SettingsModify) ? Visibility.Visible : Visibility.Collapsed;
             btnNavUserManagement.Visibility = authz.Can(AuthorizationAction.UserManage) ? Visibility.Visible : Visibility.Collapsed;
             btnNavAuditLog.Visibility = authz.Can(AuthorizationAction.AuditView) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// M8 免鼠标热键（设计文档 §3.8）：
+        /// F1 启动/停止自动运行，F2 暂停/恢复，F3 复位报警，F11 切换大显示模式。
+        /// </summary>
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.Key)
+            {
+                case Key.F1:
+                    e.Handled = true;
+                    if (_lineController.State == LineState.Running)
+                        _lineController.StopAutoRun();
+                    else
+                        _lineController.StartAutoRun();
+                    break;
+
+                case Key.F2:
+                    e.Handled = true;
+                    if (_lineController.State == LineState.Running)
+                        _lineController.Pause();
+                    else if (_lineController.State == LineState.Paused)
+                        _lineController.StartAutoRun();
+                    break;
+
+                case Key.F3:
+                    e.Handled = true;
+                    // 走编排器复位：状态机复位 + 清除 PLC 安灯 + 声音计数复位
+                    ViewResolver.TryResolve<LineOrchestrator>()?.ResetAlarm();
+                    break;
+
+                case Key.F11:
+                    e.Handled = true;
+                    ToggleBigResultWindow();
+                    break;
+            }
+        }
+
+        /// <summary>F11：切换大显示模式（全屏绿/红结果大字）。</summary>
+        private void ToggleBigResultWindow()
+        {
+            if (_bigResultWindow != null && _bigResultWindow.IsLoaded)
+            {
+                _bigResultWindow.Close();
+                _bigResultWindow = null;
+                return;
+            }
+
+            try
+            {
+                var engine = ViewResolver.TryResolve<IDetectionEngine>();
+                if (engine == null) return;
+                _bigResultWindow = new BigResultWindow(engine, _lineController, () =>
+                {
+                    _bigResultWindow?.Close();
+                    _bigResultWindow = null;
+                });
+                _bigResultWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                _logService?.LogWarn("HMI", $"大显示模式打开失败：{ex.Message}");
+                _bigResultWindow = null;
+            }
         }
 
         private void LoadLogo()

@@ -46,6 +46,8 @@ namespace TripleDetection.Application.Line
             Transition(LineState.Paused, LineState.Running, "恢复自动运行");
         }
 
+        public void StopAutoRun() => Transition(LineState.Running, LineState.Ready, "停止自动运行");
+
         public void Pause() => Transition(LineState.Running, LineState.Paused, "暂停");
 
         public void ResetAlarm()

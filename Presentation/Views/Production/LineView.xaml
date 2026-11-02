@@ -72,6 +72,7 @@
                 <ComboBox x:Name="cmbTask" Width="260" VerticalAlignment="Center" DisplayMemberPath="Name"/>
                 <Button x:Name="btnStartShift" Content="开班" Width="80" Margin="15,0,5,0" Click="BtnStartShift_Click"/>
                 <Button x:Name="btnStartAutoRun" Content="启动自动运行" Width="110" Margin="5,0" Click="BtnStartAutoRun_Click"/>
+                <Button x:Name="btnStopAutoRun" Content="停止自动运行" Width="110" Margin="5,0" Click="BtnStopAutoRun_Click"/>
                 <Button x:Name="btnPause" Content="暂停" Width="80" Margin="5,0" Click="BtnPause_Click"/>
                 <Button x:Name="btnResetAlarm" Content="报警复位" Width="90" Margin="5,0" Click="BtnResetAlarm_Click"/>
                 <Button x:Name="btnEndShift" Content="下班" Width="80" Margin="5,0" Click="BtnEndShift_Click"/>

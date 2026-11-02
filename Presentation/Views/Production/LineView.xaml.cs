@@ -156,6 +156,7 @@ namespace TripleDetection.Presentation.Views.Production
             // 按钮可用性
             btnStartShift.IsEnabled = state == LineState.Idle;
             btnStartAutoRun.IsEnabled = state == LineState.Ready || state == LineState.Paused;
+            btnStopAutoRun.IsEnabled = state == LineState.Running;
             btnPause.IsEnabled = state == LineState.Running;
             btnResetAlarm.IsEnabled = state == LineState.Alarm;
             btnEndShift.IsEnabled = state != LineState.Idle;
@@ -186,6 +187,12 @@ namespace TripleDetection.Presentation.Views.Production
         private void BtnStartAutoRun_Click(object sender, RoutedEventArgs e)
         {
             _orchestrator.StartAutoRun();
+            RefreshDisplay();
+        }
+
+        private void BtnStopAutoRun_Click(object sender, RoutedEventArgs e)
+        {
+            _orchestrator.StopAutoRun();
             RefreshDisplay();
         }
 

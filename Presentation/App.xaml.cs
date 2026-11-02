@@ -109,6 +109,10 @@ public partial class App : PrismApplication
         // M7 SPC/班次报表统计服务（transient；仅读取 DetectionRecords/Shifts）
         container.Register<SpStatisticsService>(Reuse.Transient);
 
+        // M8 HMI：蜂鸣器 + 声音编排（singleton；LineOrchestrator 构造注入）
+        container.Register<IAudioBeeper, WavToneBeeper>(Reuse.Singleton);
+        container.Register<HmiSoundService>(Reuse.Singleton);
+
         // 检测引擎 (singleton)：有 VisionMaster SDK 时用真实引擎，否则用模拟引擎
 #if VM_SDK
         container.Register<IDetectionEngine, VmIntegrationService>(Reuse.Singleton);
@@ -239,6 +243,15 @@ public partial class App : PrismApplication
         {
             var orchestrator = Container.Resolve<LineOrchestrator>();
             orchestrator?.Start();
+
+            // M8：应用声音设置（静音/音量）
+            try
+            {
+                var hmiSound = Container.Resolve<HmiSoundService>();
+                var settings = Container.Resolve<SystemSettingsService>().Load();
+                hmiSound.ApplySettings(settings.SoundMuted, settings.SoundVolume);
+            }
+            catch { /* 声音设置失败不影响产线启动 */ }
 
             // Phase 2：启动相机心跳监控
             _cameraHealthMonitor?.Start();

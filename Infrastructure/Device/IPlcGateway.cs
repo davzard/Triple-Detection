@@ -58,6 +58,9 @@ namespace TripleDetection.Infrastructure.Device
         /// <summary>写产线停机命令（LINE_STOP + ALARM_CODE）</summary>
         Task WriteLineStopAsync(int alarmCode, CancellationToken ct = default);
 
+        /// <summary>写安灯报警码（ALARM_CODE 寄存器，电气侧显示；0 = 清除报警）</summary>
+        Task WriteAlarmCodeAsync(int alarmCode, CancellationToken ct = default);
+
         /// <summary>写工位状态（STATION_STATUS：0 空闲 / 1 运行 / 2 报警）</summary>
         Task WriteStationStatusAsync(int status, CancellationToken ct = default);
     }

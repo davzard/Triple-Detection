@@ -54,6 +54,7 @@ namespace TripleDetection.Application.Line
         // ===== Phase 2：班次 / 节拍 / 方案崩溃自动恢复（设计文档 §3.3.4/§3.3.5）=====
         private readonly ShiftService? _shiftService;
         private readonly CycleTimeMonitor? _cycleMonitor;
+        private readonly HmiSoundService? _hmiSound;
         private int _maxReloadAttempts = 2;
         private int _reloadAttempts;                  // 连续重载次数（出现一次正常结果后清零）
         private string _solutionPath = string.Empty;  // 当前方案路径（崩溃后自动重载用）
@@ -71,7 +72,8 @@ namespace TripleDetection.Application.Line
             IProductService productService,
             StationContext stationContext,
             ShiftService? shiftService = null,
-            CycleTimeMonitor? cycleMonitor = null)
+            CycleTimeMonitor? cycleMonitor = null,
+            HmiSoundService? hmiSound = null)
         {
             _plc = plc;
             _line = line;
@@ -85,6 +87,7 @@ namespace TripleDetection.Application.Line
             _stationContext = stationContext;
             _shiftService = shiftService;
             _cycleMonitor = cycleMonitor;
+            _hmiSound = hmiSound;
         }
 
         // ===== 生命周期 =====
@@ -146,6 +149,10 @@ namespace TripleDetection.Application.Line
             _watchdog.Timeout -= OnWatchdogTimeout;
             _line.StateChanged -= OnLineStateChanged;
             _line.AlarmRaised -= OnLineAlarm;
+
+            // 退出前清除安灯（若仍有活动报警码）
+            try { _plc.WriteAlarmCodeAsync(0).GetAwaiter().GetResult(); }
+            catch { /* 退出路径不阻塞 */ }
 
             try { _plc.DisconnectAsync().GetAwaiter().GetResult(); }
             catch (Exception ex) { _logService?.LogWarn("产线", $"PLC 断开失败：{ex.Message}"); }
@@ -215,14 +222,27 @@ namespace TripleDetection.Application.Line
 
         public void StartAutoRun() => _line.StartAutoRun();
 
+        public void StopAutoRun() => _line.StopAutoRun();
+
         public void Pause() => _line.Pause();
 
-        public void ResetAlarm() => _line.ResetAlarm();
+        public void ResetAlarm()
+        {
+            _line.ResetAlarm();
+            _hmiSound?.Reset();
+            // 安灯清除：报警复位后写 0 到 ALARM_CODE 寄存器（电气侧熄灭）
+            Task.Run(async () =>
+            {
+                try { await _plc.WriteAlarmCodeAsync(0); }
+                catch (Exception ex) { _logService?.LogWarn("产线", $"安灯清除写入失败：{ex.Message}"); }
+            });
+        }
 
         public void EndShift()
         {
             _watchdog.Stop();
             _line.EndShift();
+            _hmiSound?.Reset();
             lock (_gate)
             {
                 _taskContextSet = false;
@@ -231,6 +251,12 @@ namespace TripleDetection.Application.Line
                 _reloadAttempts = 0;
             }
             _shiftService?.CloseShift();
+            // 下班同样清除安灯
+            Task.Run(async () =>
+            {
+                try { await _plc.WriteAlarmCodeAsync(0); }
+                catch (Exception ex) { _logService?.LogWarn("产线", $"安灯清除写入失败：{ex.Message}"); }
+            });
             _logService?.LogInfo("产线", "下班：自动运行已停止");
         }
 
@@ -291,6 +317,7 @@ namespace TripleDetection.Application.Line
 
             bool isTimeout = result.NgReason == NgReason.Timeout;
             _line.OnDetectionResult(result.IsOK, isTimeout);
+            _hmiSound?.ReportResult(result.IsOK);
 
             // Phase 2：节拍监控 + 班次统计 + 崩溃恢复计数清零
             _cycleMonitor?.Record(result.ElapsedMs);
@@ -465,6 +492,7 @@ namespace TripleDetection.Application.Line
         private void OnLineAlarm(object sender, LineAlarmEventArgs e)
         {
             if (e == null) return;
+            _hmiSound?.ReportAlarm();
             Task.Run(async () =>
             {
                 try { await _plc.WriteLineStopAsync(e.AlarmCode); }
@@ -508,6 +536,7 @@ namespace TripleDetection.Application.Line
             }
 
             // TreatAsNG（默认，安全侧）：合成 Timeout NG 走正常入库/剔废路径
+            _hmiSound?.ReportResult(false);
             SaveTimeoutNgRecord();
             Task.Run(async () =>
             {

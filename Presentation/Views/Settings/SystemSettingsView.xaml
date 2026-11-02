@@ -109,6 +109,30 @@
                 </Grid>
             </Border>
 
+            <!-- 声音设置（M8 HMI） -->
+            <TextBlock Text="声音设置" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+            <Border Background="{StaticResource CardBackgroundBrush}" Padding="16" Margin="0,0,0,20">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="静音:" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <CheckBox Grid.Row="0" Grid.Column="1" x:Name="chkSoundMuted" VerticalAlignment="Center" Margin="0,0,0,8"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="音量:" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                        <TextBox x:Name="txtSoundVolume" Width="100"/>
+                        <TextBlock Text="0-100 (OK 短鸣 1 声 / NG 长鸣 2 声，连续 NG 音调升高)" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
             <Button Content="保存设置" Click="SaveButton_Click" Style="{StaticResource PrimaryButtonStyle}" HorizontalAlignment="Left"/>
         </StackPanel>
     </ScrollViewer>
