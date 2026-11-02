@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Windows;
 using Prism.Mvvm;
+using TripleDetection.Application.Security;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Application.Services;
 
@@ -11,6 +12,7 @@ namespace TripleDetection.Presentation.ViewModels.Production
     {
         private readonly ITaskService _taskService;
         private readonly IProductService _productService;
+        private readonly IAuthorizationService? _authz;
         private string _queryName = "";
         private int? _queryProductId;
         private int? _queryStatus;
@@ -113,12 +115,16 @@ namespace TripleDetection.Presentation.ViewModels.Production
             set => SetProperty(ref _selectedTask, value);
         }
 
-        public TaskListViewModel(ITaskService taskService, IProductService productService)
+        public TaskListViewModel(ITaskService taskService, IProductService productService, IAuthorizationService? authz = null)
         {
             _taskService = taskService;
             _productService = productService;
+            _authz = authz;
             LoadProducts();
         }
+
+        /// <summary>M6 RBAC：当前用户能否管理任务（创建/编辑/审批/删除）；未注入授权服务时不拦截。</summary>
+        public bool CanManage => _authz?.Can(AuthorizationAction.TaskManage) ?? true;
 
         private void LoadProducts()
         {

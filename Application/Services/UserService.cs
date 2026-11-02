@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TripleDetection.Application.Security;
 using TripleDetection.Domain.Entities;
+using TripleDetection.Domain.Enums;
 using TripleDetection.Domain.Repositories;
 
 namespace TripleDetection.Application.Services;
@@ -11,12 +13,14 @@ public class UserService : IUserService
     private readonly IRepository<User> _repository;
     private readonly IAuditLogService _auditLog;
     private readonly IPasswordHashService _hashService;
+    private readonly IAuthorizationService? _authz;
 
-    public UserService(IRepository<User> repository, IAuditLogService auditLog, IPasswordHashService hashService)
+    public UserService(IRepository<User> repository, IAuditLogService auditLog, IPasswordHashService hashService, IAuthorizationService? authz = null)
     {
         _repository = repository;
         _auditLog = auditLog;
         _hashService = hashService ?? new PasswordHashService();
+        _authz = authz;
     }
 
     public User Authenticate(string username, string password)
@@ -56,6 +60,7 @@ public class UserService : IUserService
 
     public void Create(User user, string createBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.UserManage);
         if (string.IsNullOrEmpty(user.Username)) throw new ArgumentException("Username is required");
         var existing = GetByUsername(user.Username);
         if (existing != null) throw new InvalidOperationException($"User '{user.Username}' already exists");
@@ -66,6 +71,7 @@ public class UserService : IUserService
 
     public void Update(User user, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.UserManage);
         var existing = GetByUsername(user.Username);
         if (existing == null) throw new InvalidOperationException($"User '{user.Username}' not found");
         user.Id = existing.Id;
@@ -76,6 +82,7 @@ public class UserService : IUserService
 
     public void Delete(string username, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.UserManage);
         var existing = GetByUsername(username);
         if (existing == null) throw new InvalidOperationException($"User '{username}' not found");
         _repository.Delete(existing.Id);
@@ -84,6 +91,7 @@ public class UserService : IUserService
 
     public void Enable(string username, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.UserManage);
         var user = GetByUsername(username);
         if (user == null) throw new InvalidOperationException($"User '{username}' not found");
         user.IsEnabled = true;
@@ -94,6 +102,7 @@ public class UserService : IUserService
 
     public void Disable(string username, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.UserManage);
         var user = GetByUsername(username);
         if (user == null) throw new InvalidOperationException($"User '{username}' not found");
         user.IsEnabled = false;
@@ -104,6 +113,7 @@ public class UserService : IUserService
 
     public void Lock(string username, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.UserManage);
         var user = GetByUsername(username);
         if (user == null) throw new InvalidOperationException($"User '{username}' not found");
         user.IsLocked = true;
@@ -114,6 +124,7 @@ public class UserService : IUserService
 
     public void Unlock(string username, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.UserManage);
         var user = GetByUsername(username);
         if (user == null) throw new InvalidOperationException($"User '{username}' not found");
         user.IsLocked = false;

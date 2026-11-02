@@ -2,6 +2,7 @@ using TripleDetection.Presentation;
 using System.Windows;
 using System.Windows.Controls;
 using TripleDetection.Presentation.ViewModels.Settings;
+using TripleDetection.Application.Security;
 using TripleDetection.Application.SettingsServices;
 using TripleDetection.Application.VmServices;
 
@@ -21,10 +22,12 @@ namespace TripleDetection.Presentation.Views
         {
             InitializeComponent();
 
-            _commService = new CommunicationSettingsService();
-            _vmService = new VmSettingsService();
-            _sysService = new SystemSettingsService();
-            _deviceService = new DeviceControlSettingsService();
+            // M6 RBAC：参数保存需工程师及以上权限
+            var authz = ViewResolver.TryResolve<IAuthorizationService>();
+            _commService = new CommunicationSettingsService(authz);
+            _vmService = new VmSettingsService(authz);
+            _sysService = new SystemSettingsService(authz);
+            _deviceService = new DeviceControlSettingsService(authz);
             _viewModel = ViewResolver.Resolve<SettingsShellViewModel>();
 
             _navButtons = new[] { btnCommunication, btnVmSettings, btnSystem, btnDeviceControl };

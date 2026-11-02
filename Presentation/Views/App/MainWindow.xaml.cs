@@ -11,6 +11,7 @@ using Prism.Commands;
 using Prism.Events;
 using Prism.Navigation.Regions;
 using TripleDetection.Application.Line;
+using TripleDetection.Application.Security;
 using TripleDetection.Application.Services;
 using TripleDetection.Infrastructure.Device;
 using TripleDetection.Presentation.Events;
@@ -27,13 +28,15 @@ namespace TripleDetection.Presentation.Views.App
         private readonly IEventAggregator _eventAggregator;
         private readonly ILineController _lineController;
         private readonly IPlcGateway _plcGateway;
+        private readonly IAuthorizationService? _authorization;
         private readonly ObservableCollection<TabItemViewModel> _tabItems = new ObservableCollection<TabItemViewModel>();
 
         private bool _isNavExpanded = true;
         private readonly Dictionary<string, Button> _navButtons = new Dictionary<string, Button>();
 
         public MainWindow(MainViewModel viewModel, IRegionManager regionManager, LoggingService logService,
-            IEventAggregator eventAggregator, ILineController lineController, IPlcGateway plcGateway)
+            IEventAggregator eventAggregator, ILineController lineController, IPlcGateway plcGateway,
+            IAuthorizationService? authorization = null)
         {
             _viewModel = viewModel;
             _regionManager = regionManager;
@@ -41,6 +44,7 @@ namespace TripleDetection.Presentation.Views.App
             _eventAggregator = eventAggregator;
             _lineController = lineController;
             _plcGateway = plcGateway;
+            _authorization = authorization;
 
             InitializeComponent();
 
@@ -68,7 +72,10 @@ namespace TripleDetection.Presentation.Views.App
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LoadLogo();
-            txtUsername.Text = SessionManager.CurrentUserName;
+            txtUsername.Text = SessionManager.CurrentUserId == 0
+                ? SessionManager.CurrentUserName
+                : $"{SessionManager.CurrentUserName}（{SessionManager.CurrentRole.ToDisplay()}）";
+            ApplyRoleGating();
             UpdateStatusBar();
             _logService.Log("Application started");
 
@@ -77,6 +84,21 @@ namespace TripleDetection.Presentation.Views.App
                 _regionManager.RequestNavigate("MainContentRegion", "Dashboard");
             OpenTab("Dashboard", "📊 仪表盘");
             StartStatusBarTimer();
+        }
+
+        /// <summary>
+        /// M6 RBAC：按当前角色隐藏无权限的导航入口（体验层；安全层由 Service 强制校验兜底）。
+        /// 操作员：隐藏 产品/任务/参数设置/审计日志；工程师：再隐藏 用户管理。
+        /// </summary>
+        private void ApplyRoleGating()
+        {
+            var authz = _authorization;
+            if (authz == null) return;
+            btnNavProducts.Visibility = authz.Can(AuthorizationAction.ProductManage) ? Visibility.Visible : Visibility.Collapsed;
+            btnNavTasks.Visibility = authz.Can(AuthorizationAction.TaskManage) ? Visibility.Visible : Visibility.Collapsed;
+            btnNavSettings.Visibility = authz.Can(AuthorizationAction.SettingsModify) ? Visibility.Visible : Visibility.Collapsed;
+            btnNavUserManagement.Visibility = authz.Can(AuthorizationAction.UserManage) ? Visibility.Visible : Visibility.Collapsed;
+            btnNavAuditLog.Visibility = authz.Can(AuthorizationAction.AuditView) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void LoadLogo()

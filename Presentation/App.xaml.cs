@@ -8,6 +8,7 @@ using Prism.DryIoc;
 using Prism.Events;
 using Prism.Ioc;
 using TripleDetection.Application.Line;
+using TripleDetection.Application.Security;
 using TripleDetection.Application.Services;
 using TripleDetection.Application.SettingsServices;
 using TripleDetection.Application.VmServices;
@@ -83,16 +84,21 @@ public partial class App : PrismApplication
         container.Register<StationContext>(Reuse.Singleton);
         container.RegisterInstance(new ImageArchiver(eventAggregator, loggingService));
 
-        // 系统配置（SystemConfigs 表，启动时幂等补种默认值）
-        container.RegisterInstance(new SystemConfigService((TripleDetectionDbContext)container.Resolve<TripleDetectionDbContext>(), loggingService));
-        container.Resolve<SystemConfigService>().EnsureDefaults();
-
         // Application Services (transient)
         container.Register<IPasswordHashService, PasswordHashService>(Reuse.Transient);
         container.Register<IUserService, UserService>(Reuse.Transient);
         container.Register<IProductService, ProductService>(Reuse.Transient);
         container.Register<ITaskService, TaskService>(Reuse.Transient);
         container.Register<IAuditLogService, AuditLogService>(Reuse.Transient);
+
+        // M6 RBAC：授权服务（单例；越权尝试写审计日志）。
+        // 须在 IAuditLogService 之后注册并解析（其依赖审计服务）。
+        container.Register<IAuthorizationService, AuthorizationService>(Reuse.Singleton);
+
+        // 系统配置（SystemConfigs 表，启动时幂等补种默认值）
+        container.RegisterInstance(new SystemConfigService((TripleDetectionDbContext)container.Resolve<TripleDetectionDbContext>(), loggingService,
+            container.Resolve<IAuthorizationService>()));
+        container.Resolve<SystemConfigService>().EnsureDefaults();
         container.Register<IDetectionRecordService, DetectionRecordService>(Reuse.Transient);
         container.Register<CommunicationSettingsService>(Reuse.Transient);
         container.Register<VmSettingsService>(Reuse.Transient);

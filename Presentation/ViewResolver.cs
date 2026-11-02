@@ -21,5 +21,20 @@ namespace TripleDetection.Presentation
                 ?? throw new InvalidOperationException("Application 尚未初始化");
             return (T)app.Container.Resolve(typeof(T), (parameterType, parameter));
         }
+
+        /// <summary>尝试解析；容器不可用（设计器）或解析失败时返回 null。</summary>
+        public static T? TryResolve<T>() where T : class
+        {
+            try
+            {
+                var app = System.Windows.Application.Current as PrismApplication;
+                if (app == null) return null;
+                return (T)app.Container.Resolve(typeof(T));
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 }

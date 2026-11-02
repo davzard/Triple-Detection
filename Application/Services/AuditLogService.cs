@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TripleDetection.Application.Security;
 using TripleDetection.Domain;
 using TripleDetection.Domain.Entities;
+using TripleDetection.Domain.Enums;
 using TripleDetection.Domain.Repositories;
 
 namespace TripleDetection.Application.Services;
@@ -10,10 +12,12 @@ namespace TripleDetection.Application.Services;
 public class AuditLogService : IAuditLogService
 {
     private readonly IAuditLogRepository _repository;
+    private readonly IAuthorizationService? _authz;
 
-    public AuditLogService(IAuditLogRepository repository)
+    public AuditLogService(IAuditLogRepository repository, IAuthorizationService? authz = null)
     {
         _repository = repository;
+        _authz = authz;
     }
 
     public void Log(int userId, string action, string objectType, int objectId, string details)
@@ -45,7 +49,11 @@ public class AuditLogService : IAuditLogService
     }
 
     public IPagedResult<AuditLog> Query(AuditLogQuery query) => _repository.Query(query);
-    public IEnumerable<AuditLog> Export(AuditLogQuery query) => _repository.Export(query);
+    public IEnumerable<AuditLog> Export(AuditLogQuery query)
+    {
+        _authz?.Require(AuthorizationAction.AuditExport);
+        return _repository.Export(query);
+    }
 
     public IEnumerable<AuditLog> GetByUserId(int userId)
     {

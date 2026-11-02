@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using TripleDetection.Application.Security;
 using TripleDetection.Domain.Entities;
+using TripleDetection.Domain.Enums;
 using TripleDetection.Infrastructure.Persistence;
 
 namespace TripleDetection.Application.Services
@@ -73,10 +75,13 @@ namespace TripleDetection.Application.Services
             (CatBackup, KeyKeepCount, "7", "数据库备份保留份数"),
         };
 
-        public SystemConfigService(TripleDetectionDbContext db, LoggingService logService)
+        private readonly IAuthorizationService? _authz;
+
+        public SystemConfigService(TripleDetectionDbContext db, LoggingService logService, IAuthorizationService? authz = null)
         {
             _db = db;
             _logService = logService;
+            _authz = authz;
         }
 
         /// <summary>幂等补种默认配置（仅插入不存在的 Key）。启动时调用一次。</summary>
@@ -152,6 +157,7 @@ namespace TripleDetection.Application.Services
 
         public void Set(string category, string key, string value, string description = "")
         {
+            _authz?.Require(AuthorizationAction.SettingsModify);
             lock (_gate)
             {
                 try

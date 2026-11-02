@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using TripleDetection.Application.Security;
 using TripleDetection.Domain.Entities;
+using TripleDetection.Domain.Enums;
 using TripleDetection.Domain.Repositories;
 
 namespace TripleDetection.Application.Services;
@@ -9,11 +11,13 @@ public class ProductService : IProductService
 {
     private readonly IRepository<Product> _repository;
     private readonly IAuditLogService _auditLog;
+    private readonly IAuthorizationService? _authz;
 
-    public ProductService(IRepository<Product> repository, IAuditLogService auditLog)
+    public ProductService(IRepository<Product> repository, IAuditLogService auditLog, IAuthorizationService? authz = null)
     {
         _repository = repository;
         _auditLog = auditLog;
+        _authz = authz;
     }
 
     public IEnumerable<Product> GetAll() => _repository.GetAll();
@@ -21,6 +25,7 @@ public class ProductService : IProductService
 
     public void Create(Product product, string createBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.ProductManage);
         product.CreateBy = createBy;
         product.UpdateBy = createBy;
         product.CreateAt = DateTime.Now;
@@ -32,6 +37,7 @@ public class ProductService : IProductService
 
     public void Update(Product product, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.ProductManage);
         product.UpdateBy = updateBy;
         product.UpdateAt = DateTime.Now;
         _repository.Update(product);
@@ -40,6 +46,7 @@ public class ProductService : IProductService
 
     public void Delete(int id, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.ProductManage);
         var product = _repository.GetById(id);
         if (product != null)
         {

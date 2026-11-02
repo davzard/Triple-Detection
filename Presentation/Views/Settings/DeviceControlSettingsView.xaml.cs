@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using TripleDetection.Application.Security;
 using TripleDetection.Application.SettingsServices;
+using TripleDetection.Presentation;
 using TripleDetection.Presentation.Models;
 
 namespace TripleDetection.Presentation.Views.Settings
@@ -12,7 +14,8 @@ namespace TripleDetection.Presentation.Views.Settings
         public DeviceControlSettingsView()
         {
             InitializeComponent();
-            _service = new DeviceControlSettingsService();
+            // M6 RBAC：参数保存需工程师及以上权限
+            _service = new DeviceControlSettingsService(ViewResolver.TryResolve<IAuthorizationService>());
             LoadSettings();
         }
 

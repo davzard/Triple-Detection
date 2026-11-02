@@ -7,6 +7,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
+using TripleDetection.Application.Security;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Domain.Entities.Queries;
 using TripleDetection.Domain.Repositories;
@@ -30,8 +31,23 @@ namespace TripleDetection.Presentation.Views.Audit
 
             InitializeComponent();
 
+            // M6 RBAC：导出仅管理员（工程师可查询查看）
+            btnExport.IsEnabled = CanExport();
+
             LoadUsers();
             BindData();
+        }
+
+        private bool CanExport()
+        {
+            try
+            {
+                return ViewResolver.Resolve<IAuthorizationService>().Can(AuthorizationAction.AuditExport);
+            }
+            catch
+            {
+                return true; // 设计器/容器不可用时不拦截
+            }
         }
 
         private void LoadUsers()
@@ -255,6 +271,11 @@ namespace TripleDetection.Presentation.Views.Audit
 
         private void BtnExport_Click(object sender, RoutedEventArgs e)
         {
+            if (!CanExport())
+            {
+                MessageBox.Show("当前角色无权限导出审计日志（仅管理员）", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             var query = BuildQuery();
             query.PageIndex = 0;
             query.PageSize = int.MaxValue;

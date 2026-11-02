@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using TripleDetection.Application.Security;
 using TripleDetection.Infrastructure;
 using TripleDetection.Presentation.Models;
 
@@ -9,10 +10,12 @@ public class CommunicationSettingsService
 {
     private readonly string _configPath;
     private CommunicationSettings _settings;
+    private readonly IAuthorizationService? _authz;
 
-    public CommunicationSettingsService()
+    public CommunicationSettingsService(IAuthorizationService? authz = null)
     {
         _configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "communication.json");
+        _authz = authz;
     }
 
     public CommunicationSettings Load()
@@ -23,6 +26,7 @@ public class CommunicationSettingsService
 
     public void Save(CommunicationSettings settings)
     {
+        _authz?.Require(AuthorizationAction.SettingsModify);
         _settings = settings;
         JsonHelper.Save(settings, _configPath);
     }

@@ -2,7 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 using TripleDetection.Presentation.Models;
+using TripleDetection.Application.Security;
 using TripleDetection.Application.SettingsServices;
+using TripleDetection.Presentation;
 
 namespace TripleDetection.Presentation.Views.Settings
 {
@@ -13,7 +15,8 @@ namespace TripleDetection.Presentation.Views.Settings
         public VmSettingsView()
         {
             InitializeComponent();
-            _service = new VmSettingsService();
+            // M6 RBAC：参数保存需工程师及以上权限
+            _service = new VmSettingsService(ViewResolver.TryResolve<IAuthorizationService>());
             LoadSettings();
         }
 

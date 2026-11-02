@@ -75,7 +75,7 @@
             </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,5">
-                <Button Content="新增任务" Width="100" Click="BtnAdd_Click"/>
+                <Button Content="新增任务" Width="100" Click="BtnAdd_Click" IsEnabled="{Binding CanManage}"/>
             </StackPanel>
 
             <DataGrid Grid.Row="1" ItemsSource="{Binding Tasks}" SelectedItem="{Binding SelectedTask}"
@@ -97,9 +97,12 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
-                                    <Button Content="编辑" Width="50" Margin="2" Click="BtnEdit_Click"/>
-                                    <Button Content="审核" Width="50" Margin="2" Click="BtnApprove_Click"/>
-                                    <Button Content="删除" Width="50" Margin="2" Click="BtnDelete_Click"/>
+                                    <Button Content="编辑" Width="50" Margin="2" Click="BtnEdit_Click"
+                                            IsEnabled="{Binding DataContext.CanManage, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                    <Button Content="审核" Width="50" Margin="2" Click="BtnApprove_Click"
+                                            IsEnabled="{Binding DataContext.CanManage, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                    <Button Content="删除" Width="50" Margin="2" Click="BtnDelete_Click"
+                                            IsEnabled="{Binding DataContext.CanManage, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>

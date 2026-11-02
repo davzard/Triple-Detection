@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Windows;
 using Prism.Mvvm;
+using TripleDetection.Application.Security;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Application.Services;
 
@@ -10,6 +11,7 @@ namespace TripleDetection.Presentation.ViewModels.Production
     public class ProductListViewModel : BindableBase
     {
         private readonly IProductService _productService;
+        private readonly IAuthorizationService? _authz;
         private string _queryCode = "";
         private string _queryName = "";
         private int? _queryStatus;
@@ -104,10 +106,14 @@ namespace TripleDetection.Presentation.ViewModels.Production
             set => SetProperty(ref _selectedProduct, value);
         }
 
-        public ProductListViewModel(IProductService productService)
+        public ProductListViewModel(IProductService productService, IAuthorizationService? authz = null)
         {
             _productService = productService;
+            _authz = authz;
         }
+
+        /// <summary>M6 RBAC：当前用户能否管理产品（创建/编辑/删除）；未注入授权服务时不拦截。</summary>
+        public bool CanManage => _authz?.Can(AuthorizationAction.ProductManage) ?? true;
 
         public void Search()
         {

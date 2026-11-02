@@ -2,7 +2,9 @@ using System;
 using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
+using TripleDetection.Application.Security;
 using TripleDetection.Application.Services;
+using TripleDetection.Domain.Enums;
 
 namespace TripleDetection.Infrastructure.Persistence
 {
@@ -15,12 +17,14 @@ namespace TripleDetection.Infrastructure.Persistence
         private readonly LoggingService _logService;
         private readonly string _dbPath;
         private readonly string _backupDir;
+        private readonly IAuthorizationService? _authz;
 
-        public DatabaseBackupService(string dbPath, LoggingService logService, string? backupDir = null)
+        public DatabaseBackupService(string dbPath, LoggingService logService, string? backupDir = null, IAuthorizationService? authz = null)
         {
             _dbPath = dbPath;
             _logService = logService;
             _backupDir = backupDir ?? Path.Combine(Path.GetDirectoryName(dbPath) ?? ".", "backup");
+            _authz = authz;
         }
 
         /// <summary>
@@ -30,6 +34,8 @@ namespace TripleDetection.Infrastructure.Persistence
         /// <returns>备份文件路径；失败返回 null</returns>
         public string? Backup(int keepCount)
         {
+            // 越权校验在 try 外：AuthorizationException 不被吞掉
+            _authz?.Require(AuthorizationAction.BackupRun);
             try
             {
                 if (!File.Exists(_dbPath))

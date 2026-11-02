@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TripleDetection.Application.Security;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Domain.Enums;
 using TripleDetection.Domain.Repositories;
@@ -10,11 +11,13 @@ public class TaskService : ITaskService
 {
     private readonly IRepository<ProdTask> _repository;
     private readonly IAuditLogService _auditLog;
+    private readonly IAuthorizationService? _authz;
 
-    public TaskService(IRepository<ProdTask> repository, IAuditLogService auditLog)
+    public TaskService(IRepository<ProdTask> repository, IAuditLogService auditLog, IAuthorizationService? authz = null)
     {
         _repository = repository;
         _auditLog = auditLog;
+        _authz = authz;
     }
 
     public IEnumerable<ProdTask> GetAll() => _repository.GetAll();
@@ -23,6 +26,7 @@ public class TaskService : ITaskService
 
     public void Create(ProdTask task, string createBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.TaskManage);
         task.CreateBy = createBy;
         task.UpdateBy = createBy;
         task.CreateAt = DateTime.Now;
@@ -35,6 +39,7 @@ public class TaskService : ITaskService
 
     public void Update(ProdTask task, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.TaskManage);
         task.UpdateBy = updateBy;
         task.UpdateAt = DateTime.Now;
         _repository.Update(task);
@@ -43,6 +48,7 @@ public class TaskService : ITaskService
 
     public void Approve(int id, string reviewedBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.TaskApprove);
         var task = _repository.GetById(id);
         if (task != null && task.Status == TaskStatus.Pending)
         {
@@ -58,6 +64,8 @@ public class TaskService : ITaskService
 
     public void UpdateStatus(int id, TaskStatus status, string updateBy, int currentUserId)
     {
+        // 审批走 TaskApprove，其余状态变更走 TaskManage
+        _authz?.Require(status == TaskStatus.Approved ? AuthorizationAction.TaskApprove : AuthorizationAction.TaskManage);
         var task = _repository.GetById(id);
         if (task != null)
         {
@@ -71,6 +79,7 @@ public class TaskService : ITaskService
 
     public void Delete(int id, string updateBy, int currentUserId)
     {
+        _authz?.Require(AuthorizationAction.TaskManage);
         var task = _repository.GetById(id);
         if (task != null)
         {
