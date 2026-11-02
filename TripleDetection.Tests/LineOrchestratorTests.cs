@@ -350,6 +350,29 @@ namespace TripleDetection.Tests
             Assert.True(WaitFor(() => f.Plc.LastLineStopAlarmCode == (int)LineAlarmCode.ConsecutiveNg));
         }
 
+        [Fact]
+        public void Alarm_WritesAndonRegister_ResetAlarm_ClearsAndon()
+        {
+            var f = Create(ngThreshold: 3);
+            SeedShiftData(f.Products, f.Tasks);
+            f.Engine.EngineMode = StubDetectionEngine.Mode.Ng;
+            f.Orchestrator.StartShift(10);
+            f.Orchestrator.StartAutoRun();
+
+            for (int i = 0; i < 3; i++)
+                f.Plc.SimulateTrigger();
+
+            Assert.True(WaitFor(() => f.Line.State == LineState.Alarm));
+            // 报警时安灯寄存器（40015）写入报警码
+            Assert.True(WaitFor(() => f.Plc.LastAlarmCode == (int)LineAlarmCode.ConsecutiveNg));
+
+            f.Orchestrator.ResetAlarm();
+
+            Assert.Equal(LineState.Ready, f.Line.State);
+            // 复位后安灯寄存器清零
+            Assert.True(WaitFor(() => f.Plc.LastAlarmCode == 0));
+        }
+
         // ===== 换型 =====
 
         [Fact]

@@ -89,6 +89,38 @@ namespace TripleDetection.Tests
         }
 
         [Fact]
+        public void StopAutoRun_RunningToReady_RaisesStateChanged()
+        {
+            var lc = Create();
+            lc.StartShift();
+            lc.StartAutoRun();
+            LineStateChangedEventArgs args = null;
+            lc.StateChanged += (s, e) => args = e;
+
+            lc.StopAutoRun();
+
+            Assert.Equal(LineState.Ready, lc.State);
+            Assert.NotNull(args);
+            Assert.Equal(LineState.Running, args.From);
+            Assert.Equal(LineState.Ready, args.To);
+        }
+
+        [Fact]
+        public void StopAutoRun_FromNonRunning_Ignored()
+        {
+            var lc = Create();
+            lc.StopAutoRun(); // Idle 无效
+            Assert.Equal(LineState.Idle, lc.State);
+            lc.StartShift();
+            lc.StopAutoRun(); // Ready 无效
+            Assert.Equal(LineState.Ready, lc.State);
+            lc.StartAutoRun();
+            lc.Pause();
+            lc.StopAutoRun(); // Paused 无效
+            Assert.Equal(LineState.Paused, lc.State);
+        }
+
+        [Fact]
         public void ConsecutiveNg_ReachThreshold_RaisesAlarm1001()
         {
             var lc = Create(ngThreshold: 3);
