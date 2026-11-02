@@ -30,6 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
     <PackageReference Include="Prism.DryIoc" Version="9.0.537" />
     <!-- Prism.Wpf 提供 Prism.Regions / PrismApplication 等 WPF 专用类型 -->
     <PackageReference Include="Prism.Wpf" Version="9.0.537" />

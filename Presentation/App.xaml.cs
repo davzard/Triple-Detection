@@ -27,6 +27,7 @@ using TripleDetection.Presentation.Views.Audit;
 using TripleDetection.Presentation.Views.Auth;
 using TripleDetection.Presentation.Views.Detection;
 using TripleDetection.Presentation.Views.Production;
+using TripleDetection.Presentation.Views.Quality;
 using TripleDetection.Presentation.Views.Settings;
 
 public partial class App : PrismApplication
@@ -105,6 +106,8 @@ public partial class App : PrismApplication
         container.Register<SystemSettingsService>(Reuse.Transient);
         container.Register<DeviceControlSettingsService>(Reuse.Transient);
         container.Register<SettingsSyncService>(Reuse.Transient);
+        // M7 SPC/班次报表统计服务（transient；仅读取 DetectionRecords/Shifts）
+        container.Register<SpStatisticsService>(Reuse.Transient);
 
         // 检测引擎 (singleton)：有 VisionMaster SDK 时用真实引擎，否则用模拟引擎
 #if VM_SDK
@@ -189,6 +192,9 @@ public partial class App : PrismApplication
         containerRegistry.RegisterForNavigation<UserManagementView>("UserManagement");
         containerRegistry.RegisterForNavigation<AuditLogView>("AuditLog");
         containerRegistry.RegisterForNavigation<DetectionHistoryView>("DetectionHistory");
+        // M7 质量分析（所有角色可见：只读统计）
+        containerRegistry.RegisterForNavigation<SpcView>("Spc");
+        containerRegistry.RegisterForNavigation<ShiftReportView>("ShiftReport");
 
         // MainWindow as singleton
         container.Register<MainWindow>(Reuse.Singleton);

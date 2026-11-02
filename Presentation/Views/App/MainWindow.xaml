@@ -116,6 +116,10 @@
                                 Style="{StaticResource NavButtonStyle}" Click="BtnNav_Click" Tag="AuditLog"/>
                         <Button x:Name="btnNavDetectionHistory" Content="📜 检测记录"
                                 Style="{StaticResource NavButtonStyle}" Click="BtnNav_Click" Tag="DetectionHistory"/>
+                        <Button x:Name="btnNavSpc" Content="📈 SPC 分析"
+                                Style="{StaticResource NavButtonStyle}" Click="BtnNav_Click" Tag="Spc"/>
+                        <Button x:Name="btnNavShiftReport" Content="🗒️ 班次报表"
+                                Style="{StaticResource NavButtonStyle}" Click="BtnNav_Click" Tag="ShiftReport"/>
                     </StackPanel>
                 </Grid>
             </Border>

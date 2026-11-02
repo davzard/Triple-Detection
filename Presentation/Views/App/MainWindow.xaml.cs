@@ -61,6 +61,8 @@ namespace TripleDetection.Presentation.Views.App
             _navButtons["UserManagement"] = btnNavUserManagement;
             _navButtons["AuditLog"] = btnNavAuditLog;
             _navButtons["DetectionHistory"] = btnNavDetectionHistory;
+            _navButtons["Spc"] = btnNavSpc;
+            _navButtons["ShiftReport"] = btnNavShiftReport;
 
             btnToggleNav.IsChecked = _isNavExpanded;
 
