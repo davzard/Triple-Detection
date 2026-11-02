@@ -114,6 +114,12 @@ namespace TripleDetection.Tests
             public IEnumerable<DetectionRecord> Export(DetectionRecordQuery query) => Saved;
         }
 
+        private class StubTimeSync : ITimeSyncService
+        {
+            public TimeSpan? Offset; // null = 网络不可达
+            public TimeSpan? GetOffset(TimeSpan timeout) => Offset;
+        }
+
         // ===== 装配 =====
 
         private class Fixture
@@ -129,7 +135,7 @@ namespace TripleDetection.Tests
             public DetectionWatchdog Watchdog;
         }
 
-        private Fixture Create(string onTimeout = "TreatAsNG", int timeoutMs = 5000, int ngThreshold = 3, int maxReloadAttempts = 2)
+        private Fixture Create(string onTimeout = "TreatAsNG", int timeoutMs = 5000, int ngThreshold = 3, int maxReloadAttempts = 2, ITimeSyncService timeSync = null)
         {
             var log = new LoggingService(_dir, null);
             var dbPath = Path.Combine(_dir, "orch.db");
@@ -150,7 +156,9 @@ namespace TripleDetection.Tests
             var records = new StubRecordService();
             var station = new StationContext(null);
 
-            var orch = new LineOrchestrator(plc, line, engine, watchdog, config, log, records, tasks, products, station);
+            var orch = timeSync == null
+                ? new LineOrchestrator(plc, line, engine, watchdog, config, log, records, tasks, products, station)
+                : new LineOrchestrator(plc, line, engine, watchdog, config, log, records, tasks, products, station, null, null, null, timeSync);
             orch.Start();
 
             return new Fixture { Orchestrator = orch, Plc = plc, Line = line, Engine = engine, Tasks = tasks, Products = products, Records = records, Config = config, Watchdog = watchdog };
@@ -225,6 +233,54 @@ namespace TripleDetection.Tests
 
             Assert.False(f.Orchestrator.StartShift(999));
             Assert.Equal(LineState.Idle, f.Line.State);
+        }
+
+        // ===== M9-lite 开班前时间同步检查 =====
+
+        [Fact]
+        public void StartShift_TimeDriftOver5s_OperatorAborts_StaysIdle()
+        {
+            var f = Create(timeSync: new StubTimeSync { Offset = TimeSpan.FromSeconds(30) });
+            SeedShiftData(f.Products, f.Tasks);
+            f.Orchestrator.TimeDriftCheck = offset => false; // 操作员选择中止
+
+            Assert.False(f.Orchestrator.StartShift(10));
+            Assert.Equal(LineState.Idle, f.Line.State);
+            Assert.False(f.Engine.IsSolutionLoaded); // 中止发生在方案加载之前
+        }
+
+        [Fact]
+        public void StartShift_TimeDriftOver5s_OperatorConfirms_ShiftStarts()
+        {
+            var f = Create(timeSync: new StubTimeSync { Offset = TimeSpan.FromSeconds(30) });
+            SeedShiftData(f.Products, f.Tasks);
+            f.Orchestrator.TimeDriftCheck = offset => true; // 操作员确认继续
+
+            Assert.True(f.Orchestrator.StartShift(10));
+            Assert.Equal(LineState.Ready, f.Line.State);
+        }
+
+        [Fact]
+        public void StartShift_TimeDriftUnder5s_StartsWithoutConfirm()
+        {
+            var f = Create(timeSync: new StubTimeSync { Offset = TimeSpan.FromSeconds(2) });
+            SeedShiftData(f.Products, f.Tasks);
+            bool asked = false;
+            f.Orchestrator.TimeDriftCheck = offset => { asked = true; return true; };
+
+            Assert.True(f.Orchestrator.StartShift(10));
+            Assert.False(asked); // 阈值内不弹确认
+            Assert.Equal(LineState.Ready, f.Line.State);
+        }
+
+        [Fact]
+        public void StartShift_TimeSyncUnavailable_StartsAnyway()
+        {
+            var f = Create(timeSync: new StubTimeSync { Offset = null }); // 网络不可达
+            SeedShiftData(f.Products, f.Tasks);
+
+            Assert.True(f.Orchestrator.StartShift(10));
+            Assert.Equal(LineState.Ready, f.Line.State);
         }
 
         // ===== 触发 → 检测 → 判定 =====
