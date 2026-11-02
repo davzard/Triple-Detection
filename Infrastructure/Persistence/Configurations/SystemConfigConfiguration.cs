@@ -11,8 +11,9 @@ public class SystemConfigConfiguration : IEntityTypeConfiguration<SystemConfig>
         builder.ToTable("SystemConfigs");
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Category).HasMaxLength(100);
-        builder.Property(s => s.Key).HasMaxLength(100);
-        builder.Property(s => s.Value).HasMaxLength(1000);
+        // 列名与迁移 v1 建表 SQL 保持一致（ConfigKey/ConfigValue）
+        builder.Property(s => s.Key).HasColumnName("ConfigKey").HasMaxLength(100);
+        builder.Property(s => s.Value).HasColumnName("ConfigValue").HasMaxLength(1000);
         builder.Property(s => s.Description).HasMaxLength(500);
     }
 }

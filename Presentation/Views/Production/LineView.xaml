@@ -1,0 +1,95 @@
+<UserControl x:Class="TripleDetection.Presentation.Views.Production.LineView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             Background="White"
+             d:DesignHeight="600" d:DesignWidth="900">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="产线集成" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="10"/>
+
+        <!-- 状态卡片 -->
+        <Grid Grid.Row="1" Margin="10,5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Margin="0,0,5,0" Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="产线状态" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                    <TextBlock x:Name="txtLineState" Text="未连接" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="txtCurrentTask" Text="当前任务: --" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" Margin="5,0" Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="PLC 连接" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                    <TextBlock x:Name="txtPlcState" Text="未连接" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="txtPlcMode" Text="模式: --" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Margin="5,0,0,0" Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="报警" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                    <TextBlock x:Name="txtAlarmCode" Text="无" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="txtAlarmMessage" Text="" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- 班次操作 -->
+        <GroupBox Grid.Row="2" Header="班次操作" Margin="10,5" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Margin="10">
+                <TextBlock Text="当班任务:" VerticalAlignment="Center" Margin="0,0,10,0" Foreground="{StaticResource TextPrimaryBrush}"/>
+                <ComboBox x:Name="cmbTask" Width="260" VerticalAlignment="Center" DisplayMemberPath="Name"/>
+                <Button x:Name="btnStartShift" Content="开班" Width="80" Margin="15,0,5,0" Click="BtnStartShift_Click"/>
+                <Button x:Name="btnStartAutoRun" Content="启动自动运行" Width="110" Margin="5,0" Click="BtnStartAutoRun_Click"/>
+                <Button x:Name="btnPause" Content="暂停" Width="80" Margin="5,0" Click="BtnPause_Click"/>
+                <Button x:Name="btnResetAlarm" Content="报警复位" Width="90" Margin="5,0" Click="BtnResetAlarm_Click"/>
+                <Button x:Name="btnEndShift" Content="下班" Width="80" Margin="5,0" Click="BtnEndShift_Click"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Mock 模拟（仅 Mock 模式显示） -->
+        <GroupBox x:Name="grpMock" Grid.Row="3" Header="Mock PLC 模拟（测试用）" Margin="10,5"
+                  BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Visibility="Collapsed">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Orientation="Horizontal">
+                    <Button Content="模拟触发" Width="90" Margin="0,0,5,0" Click="BtnSimTrigger_Click"/>
+                    <Button Content="模拟换型" Width="90" Margin="0,0,5,0" Click="BtnSimRecipe_Click"/>
+                    <Button Content="模拟断开" Width="90" Margin="0,0,5,0" Click="BtnSimDisconnect_Click"/>
+                    <Button Content="模拟重连" Width="90" Margin="0,0,5,0" Click="BtnSimReconnect_Click"/>
+                    <TextBlock x:Name="txtTriggerCount" Text="触发次数: 0" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="{StaticResource TextSecondaryBrush}"/>
+                </StackPanel>
+                <TextBlock x:Name="txtPlcWrites" Grid.Row="1" Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}"
+                           TextWrapping="Wrap" Text="App 写入: --"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- 操作日志 -->
+        <GroupBox Grid.Row="4" Header="产线日志" Margin="10,5,10,10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+            <ListBox x:Name="lstLineLogs" Margin="5" FontSize="12"/>
+        </GroupBox>
+    </Grid>
+</UserControl>

@@ -6,10 +6,12 @@ using DryIoc;
 using Prism.DryIoc;
 using Prism.Events;
 using Prism.Ioc;
+using TripleDetection.Application.Line;
 using TripleDetection.Application.Services;
 using TripleDetection.Application.SettingsServices;
 using TripleDetection.Application.VmServices;
 using TripleDetection.Domain.Repositories;
+using TripleDetection.Infrastructure.Device;
 using TripleDetection.Infrastructure.Persistence;
 using TripleDetection.Infrastructure.Repositories;
 using TripleDetection.Presentation.ViewModels;
@@ -75,6 +77,10 @@ public partial class App : PrismApplication
         container.Register<StationContext>(Reuse.Singleton);
         container.RegisterInstance(new ImageArchiver(eventAggregator, loggingService));
 
+        // 系统配置（SystemConfigs 表，启动时幂等补种默认值）
+        container.RegisterInstance(new SystemConfigService((TripleDetectionDbContext)container.Resolve<TripleDetectionDbContext>(), loggingService));
+        container.Resolve<SystemConfigService>().EnsureDefaults();
+
         // Application Services (transient)
         container.Register<IPasswordHashService, PasswordHashService>(Reuse.Transient);
         container.Register<IUserService, UserService>(Reuse.Transient);
@@ -95,6 +101,32 @@ public partial class App : PrismApplication
         container.Register<IDetectionEngine, MockDetectionEngine>(Reuse.Singleton);
 #endif
 
+        // 产线集成（Phase 1）：PLC 网关 + 状态机 + 看门狗 + 编排器
+        var configService = container.Resolve<SystemConfigService>();
+        var plcMode = configService.GetString(SystemConfigService.CatPlc, SystemConfigService.KeyPlcMode, "mock");
+        if (string.Equals(plcMode, "modbus", StringComparison.OrdinalIgnoreCase))
+        {
+            var mapJson = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config",
+                configService.GetString(SystemConfigService.CatPlc, SystemConfigService.KeyPlcRegisterMap, "plc_register_map.json"));
+            var map = PlcRegisterMap.Load(mapJson);
+            container.RegisterInstance<IPlcGateway>(new ModbusTcpPlcGateway(loggingService, map,
+                configService.GetString(SystemConfigService.CatPlc, SystemConfigService.KeyPlcIp, "192.168.1.200"),
+                configService.GetInt(SystemConfigService.CatPlc, SystemConfigService.KeyPlcPort, 502),
+                (byte)configService.GetInt(SystemConfigService.CatPlc, SystemConfigService.KeyPlcUnitId, 1),
+                configService.GetInt(SystemConfigService.CatPlc, SystemConfigService.KeyPlcPollIntervalMs, 500),
+                configService.GetInt(SystemConfigService.CatDetection, SystemConfigService.KeyMinTriggerIntervalMs, 500)));
+        }
+        else
+        {
+            container.RegisterInstance<IPlcGateway>(new MockPlcGateway(loggingService));
+        }
+        container.RegisterInstance(new DetectionWatchdog());
+        container.RegisterInstance(new LineController(loggingService,
+            configService.GetInt(SystemConfigService.CatReject, SystemConfigService.KeyConsecutiveNgToStopLine, 10),
+            configService.GetString(SystemConfigService.CatPlc, SystemConfigService.KeyPlcOnDisconnect, "StopLine")));
+        // 编排器按构造注入解析（依赖均为已注册单例/瞬态，首次 Resolve 时实例化）
+        container.Register<LineOrchestrator>(Reuse.Singleton);
+
         // ViewModels (transient)
         container.Register<MainViewModel>(Reuse.Transient);
         container.Register<TabItemViewModel>(Reuse.Transient);
@@ -110,6 +142,7 @@ public partial class App : PrismApplication
         // Navigation（Prism 9 移除了 RegisterTypeForNavigation，改用 RegisterForNavigation 扩展方法）
         containerRegistry.RegisterForNavigation<DashboardView>("Dashboard");
         containerRegistry.RegisterForNavigation<DetectionView>("Detection");
+        containerRegistry.RegisterForNavigation<LineView>("Line");
         containerRegistry.RegisterForNavigation<ProductListView>("Products");
         containerRegistry.RegisterForNavigation<TaskListView>("Tasks");
         containerRegistry.RegisterForNavigation<LogsView>("Logs");
@@ -132,6 +165,32 @@ public partial class App : PrismApplication
             MainWindow.Show();
             MainWindow.WindowState = WindowState.Normal;
             MainWindow.Activate();
+        }
+        StartLineOrchestrator();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        try
+        {
+            var orchestrator = Container.Resolve<LineOrchestrator>();
+            orchestrator?.Stop();
+        }
+        catch { /* 退出路径不阻塞 */ }
+        base.OnExit(e);
+    }
+
+    private void StartLineOrchestrator()
+    {
+        try
+        {
+            var orchestrator = Container.Resolve<LineOrchestrator>();
+            orchestrator?.Start();
+        }
+        catch (Exception ex)
+        {
+            // 产线集成失败不阻塞主界面（可退化为纯手动检测模式）
+            MessageBox.Show($"产线集成启动失败（已降级为手动模式）: {ex.Message}", "警告", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

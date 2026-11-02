@@ -100,6 +100,8 @@
                                 Style="{StaticResource NavButtonActiveStyle}" Click="BtnNav_Click" Tag="Dashboard"/>
                         <Button x:Name="btnNavDetection" Content="🔍 检测执行"
                                 Style="{StaticResource NavButtonStyle}" Click="BtnNav_Click" Tag="Detection"/>
+                        <Button x:Name="btnNavLine" Content="🏭 产线集成"
+                                Style="{StaticResource NavButtonStyle}" Click="BtnNav_Click" Tag="Line"/>
                         <Button x:Name="btnNavProducts" Content="📦 产品管理"
                                 Style="{StaticResource NavButtonStyle}" Click="BtnNav_Click" Tag="Products"/>
                         <Button x:Name="btnNavTasks" Content="📋 任务管理"
@@ -171,10 +173,12 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="txtStatus" Grid.Column="0" Text="就绪" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtCurrentUser" Grid.Column="1" Text="当前用户: Admin" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="16,0"/>
-                <TextBlock x:Name="txtCurrentTime" Grid.Column="2" Text="" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtLineStatus" Grid.Column="1" Text="产线: --" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="16,0"/>
+                <TextBlock x:Name="txtCurrentUser" Grid.Column="2" Text="当前用户: Admin" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="16,0"/>
+                <TextBlock x:Name="txtCurrentTime" Grid.Column="3" Text="" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>

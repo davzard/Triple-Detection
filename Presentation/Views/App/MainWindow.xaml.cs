@@ -10,7 +10,9 @@ using System.Windows.Threading;
 using Prism.Commands;
 using Prism.Events;
 using Prism.Navigation.Regions;
+using TripleDetection.Application.Line;
 using TripleDetection.Application.Services;
+using TripleDetection.Infrastructure.Device;
 using TripleDetection.Presentation.Events;
 using TripleDetection.Presentation.ViewModels;
 using TripleDetection.Presentation.ViewModels.Detection;
@@ -23,17 +25,22 @@ namespace TripleDetection.Presentation.Views.App
         private readonly MainViewModel _viewModel;
         private readonly IRegionManager _regionManager;
         private readonly IEventAggregator _eventAggregator;
+        private readonly ILineController _lineController;
+        private readonly IPlcGateway _plcGateway;
         private readonly ObservableCollection<TabItemViewModel> _tabItems = new ObservableCollection<TabItemViewModel>();
 
         private bool _isNavExpanded = true;
         private readonly Dictionary<string, Button> _navButtons = new Dictionary<string, Button>();
 
-        public MainWindow(MainViewModel viewModel, IRegionManager regionManager, LoggingService logService, IEventAggregator eventAggregator)
+        public MainWindow(MainViewModel viewModel, IRegionManager regionManager, LoggingService logService,
+            IEventAggregator eventAggregator, ILineController lineController, IPlcGateway plcGateway)
         {
             _viewModel = viewModel;
             _regionManager = regionManager;
             _logService = logService;
             _eventAggregator = eventAggregator;
+            _lineController = lineController;
+            _plcGateway = plcGateway;
 
             InitializeComponent();
 
@@ -42,6 +49,7 @@ namespace TripleDetection.Presentation.Views.App
 
             _navButtons["Dashboard"] = btnNavDashboard;
             _navButtons["Detection"] = btnNavDetection;
+            _navButtons["Line"] = btnNavLine;
             _navButtons["Products"] = btnNavProducts;
             _navButtons["Tasks"] = btnNavTasks;
             _navButtons["Logs"] = btnNavLogs;
@@ -92,6 +100,22 @@ namespace TripleDetection.Presentation.Views.App
         {
             txtCurrentTime.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             txtCurrentUser.Text = $"当前用户: {txtUsername.Text}";
+            try
+            {
+                var state = _lineController?.State ?? LineState.Idle;
+                var stateText = state switch
+                {
+                    LineState.Idle => "未开班",
+                    LineState.Ready => "待启动",
+                    LineState.Running => "运行中",
+                    LineState.Paused => "已暂停",
+                    LineState.Alarm => $"报警[{_lineController.AlarmCode}]",
+                    _ => state.ToString()
+                };
+                var plcText = _plcGateway?.IsConnected == true ? "PLC已连" : "PLC断开";
+                txtLineStatus.Text = $"产线: {stateText} | {plcText}";
+            }
+            catch { /* 状态栏刷新失败不影响主界面 */ }
         }
 
         private void BtnNav_Click(object sender, RoutedEventArgs e)
@@ -119,6 +143,7 @@ namespace TripleDetection.Presentation.Views.App
             {
                 case "Dashboard": return "📊 仪表盘";
                 case "Detection": return "🔍 检测执行";
+                case "Line": return "🏭 产线集成";
                 case "Products": return "📦 产品管理";
                 case "Tasks": return "📋 任务管理";
                 case "Logs": return "📝 操作日志";
