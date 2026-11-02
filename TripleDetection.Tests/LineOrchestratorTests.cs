@@ -47,9 +47,16 @@ namespace TripleDetection.Tests
             public readonly Dictionary<string, string> Globals = new Dictionary<string, string>();
 
             public event EventHandler<DetectionResult> DetectionResult;
+            public event EventHandler SolutionCrashed;
             public bool IsSolutionLoaded => SolutionLoaded;
             public bool HasProcedure => true;
             public bool IsContinuousRun => false;
+
+            public void SimulateCrash()
+            {
+                SolutionLoaded = false;
+                SolutionCrashed?.Invoke(this, EventArgs.Empty);
+            }
 
             public void LoadSolution(string solPath) => SolutionLoaded = true;
             public List<string> GetAllProcedureNames() => new List<string> { "P1" };
@@ -122,7 +129,7 @@ namespace TripleDetection.Tests
             public DetectionWatchdog Watchdog;
         }
 
-        private Fixture Create(string onTimeout = "TreatAsNG", int timeoutMs = 5000, int ngThreshold = 3)
+        private Fixture Create(string onTimeout = "TreatAsNG", int timeoutMs = 5000, int ngThreshold = 3, int maxReloadAttempts = 2)
         {
             var log = new LoggingService(_dir, null);
             var dbPath = Path.Combine(_dir, "orch.db");
@@ -132,6 +139,7 @@ namespace TripleDetection.Tests
             config.EnsureDefaults();
             config.Set(SystemConfigService.CatDetection, SystemConfigService.KeyCaptureTimeoutMs, timeoutMs.ToString());
             config.Set(SystemConfigService.CatDetection, SystemConfigService.KeyOnCaptureTimeout, onTimeout);
+            config.Set(SystemConfigService.CatRecovery, SystemConfigService.KeyMaxReloadAttempts, maxReloadAttempts.ToString());
 
             var plc = new MockPlcGateway(log);
             var line = new LineController(log, ngThreshold, "StopLine");
@@ -400,6 +408,64 @@ namespace TripleDetection.Tests
             Assert.True(WaitFor(() => f.Line.State == LineState.Alarm));
             Assert.Equal(LineAlarmCode.PlcDisconnected, f.Line.AlarmCode);
             Assert.True(WaitFor(() => f.Plc.LastLineStopAlarmCode == (int)LineAlarmCode.PlcDisconnected));
+        }
+
+        // ===== Phase 2：方案崩溃自动恢复（设计文档 §3.3.4/§3.3.5）=====
+
+        [Fact]
+        public void Crash_自动重载_产线保持运行()
+        {
+            var f = Create();
+            SeedShiftData(f.Products, f.Tasks);
+            f.Orchestrator.StartShift(10);
+            f.Orchestrator.StartAutoRun();
+            Assert.Equal(LineState.Running, f.Line.State);
+
+            f.Engine.SimulateCrash();
+
+            Assert.True(WaitFor(() => f.Engine.SolutionLoaded), "方案应被自动重载");
+            Assert.Equal(LineState.Running, f.Line.State);
+            Assert.Equal(0, f.Line.AlarmCode);
+        }
+
+        [Fact]
+        public void Crash_超过重载上限_Alarm2002()
+        {
+            var f = Create(maxReloadAttempts: 1);
+            SeedShiftData(f.Products, f.Tasks);
+            f.Orchestrator.StartShift(10);
+            f.Orchestrator.StartAutoRun();
+
+            f.Engine.SimulateCrash(); // 第 1 次：在限额内，重载成功
+            Assert.True(WaitFor(() => f.Engine.SolutionLoaded));
+            Assert.Equal(LineState.Running, f.Line.State);
+
+            f.Engine.SimulateCrash(); // 第 2 次：超过限额 → Alarm 2002
+            Assert.True(WaitFor(() => f.Line.State == LineState.Alarm));
+            Assert.Equal(LineAlarmCode.SolutionCrash, f.Line.AlarmCode);
+            Assert.True(WaitFor(() => f.Plc.LastLineStopAlarmCode == (int)LineAlarmCode.SolutionCrash));
+        }
+
+        [Fact]
+        public void Crash_恢复后正常结果_重置崩溃计数()
+        {
+            var f = Create(maxReloadAttempts: 1);
+            SeedShiftData(f.Products, f.Tasks);
+            f.Orchestrator.StartShift(10);
+            f.Orchestrator.StartAutoRun();
+
+            f.Engine.SimulateCrash(); // 第 1 次崩溃：重载成功（计数=1，达上限）
+            Assert.True(WaitFor(() => f.Engine.SolutionLoaded));
+
+            // 一次正常检测结果 → 计数清零
+            f.Plc.SimulateTrigger();
+            Assert.True(WaitFor(() => f.Engine.RunOnceCount >= 1));
+
+            // 再次崩溃：计数已重置，应能再次重载而非直接报警
+            f.Engine.SimulateCrash();
+            Assert.True(WaitFor(() => f.Engine.SolutionLoaded));
+            Assert.Equal(LineState.Running, f.Line.State);
+            Assert.Equal(0, f.Line.AlarmCode);
         }
     }
 }

@@ -116,12 +116,18 @@ CREATE TABLE AuditLogs (
             string path = DbPath("fresh.db");
             DatabaseInitializer.Initialize(path);
 
-            Assert.Equal(new[] { 1, 2 }, GetAppliedVersions(path));
+            Assert.Equal(new[] { 1, 2, 3 }, GetAppliedVersions(path));
             var cols = GetColumns(path, "DetectionRecords");
             Assert.Contains("NgReason", cols);
             Assert.Contains("NgDetail", cols);
             Assert.Contains("StationCode", cols);
             Assert.Contains("SequenceNo", cols);
+
+            // v3：Shifts 表（Phase 2 班次实体）
+            var shiftCols = GetColumns(path, "Shifts");
+            Assert.Contains("StartAt", shiftCols);
+            Assert.Contains("OkCount", shiftCols);
+            Assert.Contains("NgCount", shiftCols);
         }
 
         [Fact]
@@ -143,7 +149,7 @@ CREATE TABLE AuditLogs (
 
             DatabaseInitializer.Initialize(path);
 
-            Assert.Equal(new[] { 1, 2 }, GetAppliedVersions(path));
+            Assert.Equal(new[] { 1, 2, 3 }, GetAppliedVersions(path));
             var cols = GetColumns(path, "DetectionRecords");
             Assert.Contains("NgReason", cols);
             Assert.Contains("CameraId", cols);
@@ -167,7 +173,7 @@ CREATE TABLE AuditLogs (
             DatabaseInitializer.Initialize(path);
             DatabaseInitializer.Initialize(path); // 第二次不应抛异常
 
-            Assert.Equal(2, GetAppliedVersions(path).Count);
+            Assert.Equal(3, GetAppliedVersions(path).Count);
             var cols = GetColumns(path, "DetectionRecords");
             Assert.Contains("NgReason", cols);
         }
