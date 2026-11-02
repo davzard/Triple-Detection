@@ -55,10 +55,18 @@ namespace TripleDetection.Application.Line
         private readonly ShiftService? _shiftService;
         private readonly CycleTimeMonitor? _cycleMonitor;
         private readonly HmiSoundService? _hmiSound;
+        private readonly ITimeSyncService? _timeSync;
         private int _maxReloadAttempts = 2;
         private int _reloadAttempts;                  // 连续重载次数（出现一次正常结果后清零）
         private string _solutionPath = string.Empty;  // 当前方案路径（崩溃后自动重载用）
         private ProdTask? _currentTask;               // 当前任务（崩溃后重写三效期用）
+
+        /// <summary>
+        /// M9-lite 开班前时间偏差确认（设计文档 §3.9）：偏差 > 5s 时调用，
+        /// 返回 true 继续开班、false 中止。未设置时默认继续（仅记日志）。
+        /// 由 UI 层挂接（弹框让操作员确认）。
+        /// </summary>
+        public Func<TimeSpan, bool>? TimeDriftCheck;
 
         public LineOrchestrator(
             IPlcGateway plc,
@@ -73,7 +81,8 @@ namespace TripleDetection.Application.Line
             StationContext stationContext,
             ShiftService? shiftService = null,
             CycleTimeMonitor? cycleMonitor = null,
-            HmiSoundService? hmiSound = null)
+            HmiSoundService? hmiSound = null,
+            ITimeSyncService? timeSync = null)
         {
             _plc = plc;
             _line = line;
@@ -88,6 +97,7 @@ namespace TripleDetection.Application.Line
             _shiftService = shiftService;
             _cycleMonitor = cycleMonitor;
             _hmiSound = hmiSound;
+            _timeSync = timeSync;
         }
 
         // ===== 生命周期 =====
@@ -166,6 +176,18 @@ namespace TripleDetection.Application.Line
         /// </summary>
         public bool StartShift(int taskId)
         {
+            // M9-lite 开班前时间同步检查（设计文档 §3.9）：偏差 > 5s 强制告警，操作员确认后才继续
+            if (_timeSync != null)
+            {
+                var offset = _timeSync.GetOffset(TimeSpan.FromSeconds(3));
+                if (offset != null && Math.Abs(offset.Value.TotalSeconds) > 5)
+                {
+                    bool proceed = TimeDriftCheck?.Invoke(offset.Value) ?? true;
+                    _logService?.LogWarn("产线", $"开班前时间偏差 {offset.Value.TotalSeconds:F1}s（>5s）{(proceed ? "，操作员确认后继续" : "，已中止开班")}");
+                    if (!proceed) return false;
+                }
+            }
+
             var task = _taskService?.GetById(taskId);
             if (task == null || task.Status != Domain.Enums.TaskStatus.Approved)
             {

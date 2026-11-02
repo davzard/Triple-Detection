@@ -113,6 +113,9 @@ public partial class App : PrismApplication
         container.Register<IAudioBeeper, WavToneBeeper>(Reuse.Singleton);
         container.Register<HmiSoundService>(Reuse.Singleton);
 
+        // M9-lite：NTP 时间同步（singleton；LineOrchestrator 构造注入，开班前检查偏差）
+        container.Register<ITimeSyncService, TimeSyncService>(Reuse.Singleton);
+
         // 检测引擎 (singleton)：有 VisionMaster SDK 时用真实引擎，否则用模拟引擎
 #if VM_SDK
         container.Register<IDetectionEngine, VmIntegrationService>(Reuse.Singleton);
@@ -220,9 +223,21 @@ public partial class App : PrismApplication
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // M9-lite 优雅退出（设计文档 §3.9）：停自动运行 → 提示关班 → flush DB → 释放 VM
         try
         {
             var orchestrator = Container.Resolve<LineOrchestrator>();
+            var line = Container.Resolve<ILineController>();
+            if (line != null && line.State != LineState.Idle)
+            {
+                var result = MessageBox.Show(
+                    "班次尚未结束。是否停止自动运行并关闭班次？",
+                    "退出确认", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (result == MessageBoxResult.Yes)
+                    orchestrator?.EndShift();
+                else
+                    orchestrator?.StopAutoRun(); // 不关班：至少停止自动运行，避免退出后产线无人检测
+            }
             orchestrator?.Stop();
         }
         catch { /* 退出路径不阻塞 */ }
@@ -232,6 +247,13 @@ public partial class App : PrismApplication
             _cameraHealthMonitor?.Stop();
             _shiftService?.Dispose();
             _lineMaintenance?.RunMaintenance();
+        }
+        catch { /* 退出路径不阻塞 */ }
+        try
+        {
+            // M9-lite：释放 VM 资源，最后 flush 并关闭数据库
+            Container.Resolve<IDetectionEngine>()?.Stop();
+            (Container.Resolve<TripleDetectionDbContext>() as IDisposable)?.Dispose();
         }
         catch { /* 退出路径不阻塞 */ }
         base.OnExit(e);

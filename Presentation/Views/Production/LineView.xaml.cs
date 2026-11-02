@@ -41,6 +41,17 @@ namespace TripleDetection.Presentation.Views.Production
 
             LoadTasks();
 
+            // M9-lite：开班前时间偏差确认（UI 弹框，设计文档 §3.9）
+            if (_orchestrator.TimeDriftCheck == null)
+                _orchestrator.TimeDriftCheck = offset =>
+                {
+                    var result = MessageBox.Show(
+                        $"系统时间与 NTP 服务器偏差 {offset.TotalSeconds:F1} 秒（超过 5 秒阈值）。\n" +
+                        "追溯时间戳可能不可信，建议先校准系统时钟。\n\n仍要继续开班吗？",
+                        "时间偏差警告", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    return result == MessageBoxResult.Yes;
+                };
+
             _line.StateChanged += (s, e) => OnLineEvent();
             _line.AlarmRaised += (s, e) => OnLineEvent();
             _logService.OnLogAdded += OnLogAdded;
