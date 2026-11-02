@@ -24,7 +24,8 @@ public static class DatabaseInitializer
     private static readonly List<(int Version, string Name, Action<SqliteConnection, SqliteTransaction> Apply)> Migrations = new()
     {
         (1, "baseline", ApplyBaseline),
-        (2, "detection-record-traceability", ApplyDetectionRecordTraceability)
+        (2, "detection-record-traceability", ApplyDetectionRecordTraceability),
+        (3, "shifts", ApplyShifts)
     };
 
     /// <param name="dbPath">数据库路径；默认 Data/tripledetection.db（测试可注入临时路径）</param>
@@ -154,6 +155,23 @@ CREATE TABLE IF NOT EXISTS AuditLogs (
 CREATE INDEX IF NOT EXISTS IX_Detection_Time ON DetectionRecords (DetectionTime);
 CREATE INDEX IF NOT EXISTS IX_Detection_Batch ON DetectionRecords (BatchNumber);");
         Execute(conn, tx, sb.ToString());
+    }
+
+    /// <summary>v3：Shifts 班次表（设计文档 §4.1，Phase 2 班次实体）。</summary>
+    private static void ApplyShifts(SqliteConnection conn, SqliteTransaction tx)
+    {
+        Execute(conn, tx, @"
+CREATE TABLE IF NOT EXISTS Shifts (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    StartAt TEXT NOT NULL, EndAt TEXT,
+    OperatorId INTEGER NOT NULL, TaskId INTEGER NOT NULL,
+    LineCode TEXT NOT NULL,
+    TotalCount INTEGER NOT NULL DEFAULT 0, OkCount INTEGER NOT NULL DEFAULT 0,
+    NgCount INTEGER NOT NULL DEFAULT 0, StopDurationMs INTEGER NOT NULL DEFAULT 0,
+    IsDeleted INTEGER NOT NULL DEFAULT 0, CreateAt TEXT NOT NULL, UpdateAt TEXT NOT NULL,
+    CreateBy TEXT, UpdateBy TEXT
+);
+CREATE INDEX IF NOT EXISTS IX_Shifts_StartAt ON Shifts (StartAt);");
     }
 
     /// <summary>列不存在才生成 ADD COLUMN（运行时按 PRAGMA table_info 判断，保证迁移幂等）。</summary>

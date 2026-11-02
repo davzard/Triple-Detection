@@ -18,6 +18,7 @@ public class TripleDetectionDbContext : DbContext
     public DbSet<DetectionRecord> DetectionRecords => Set<DetectionRecord>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
+    public DbSet<Shift> Shifts => Set<Shift>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

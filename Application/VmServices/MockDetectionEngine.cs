@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
+using TripleDetection.Application.Line;
 using TripleDetection.Application.Services;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Domain.Enums;
@@ -17,10 +18,11 @@ namespace TripleDetection.Application.VmServices
     /// 便于在无硬件环境下开发与演示。
     /// 结果回调在后台线程触发，与真实 SDK 的回调线程模型一致。
     /// </summary>
-    public class MockDetectionEngine : IDetectionEngine
+    public class MockDetectionEngine : IDetectionEngine, ICameraHeartbeat
     {
         private const double OkProbability = 0.85;
         private const int ContinuousIntervalMs = 2000;
+        private const int HeartbeatIntervalMs = 1000;
 
         private static readonly NgReason[] NgReasonPool =
         {
@@ -36,7 +38,10 @@ namespace TripleDetection.Application.VmServices
         private readonly object _lock = new object();
 
         private Timer _continuousTimer;
-        private bool _isSolutionLoaded;
+        private Timer _heartbeatTimer;
+        private volatile bool _isSolutionLoaded;
+        private volatile bool _cameraAlive = true;
+        private DateTime? _lastFrameTime;
         private string _currentProcedureName = string.Empty;
 
         private int _currentTaskId;
@@ -49,9 +54,15 @@ namespace TripleDetection.Application.VmServices
 
         public event EventHandler<DetectionResult> DetectionResult;
 
+        /// <summary>方案崩溃事件（SimulateSolutionCrash 触发，模拟 VM 工作状态异常）</summary>
+        public event EventHandler SolutionCrashed;
+
         public bool IsSolutionLoaded => _isSolutionLoaded;
         public bool HasProcedure => _isSolutionLoaded && !string.IsNullOrEmpty(_currentProcedureName);
         public bool IsContinuousRun => _continuousTimer != null;
+
+        /// <summary>最近一次出图时间（ICameraHeartbeat，相机心跳监控用）</summary>
+        public DateTime? LastFrameTime => _lastFrameTime;
 
         public MockDetectionEngine(LoggingService logService, IDetectionRecordService detectionRecordService, ImageArchiver imageArchiver, StationContext stationContext)
         {
@@ -59,6 +70,36 @@ namespace TripleDetection.Application.VmServices
             _detectionRecordService = detectionRecordService;
             _imageArchiver = imageArchiver;
             _stationContext = stationContext;
+            // 相机心跳：方案加载且相机在线时每秒刷新出图时间戳（模拟采集模块出帧）
+            _heartbeatTimer = new Timer(_ =>
+            {
+                if (_cameraAlive && _isSolutionLoaded)
+                    _lastFrameTime = DateTime.Now;
+            }, null, HeartbeatIntervalMs, HeartbeatIntervalMs);
+        }
+
+        /// <summary>模拟相机离线（心跳停止刷新），用于测试 CameraHealthMonitor 报警。</summary>
+        public void SimulateCameraLoss()
+        {
+            _cameraAlive = false;
+            _logService?.Log("[Mock] 模拟相机离线（心跳停止）");
+        }
+
+        /// <summary>模拟相机恢复（心跳恢复刷新）。</summary>
+        public void SimulateCameraRestore()
+        {
+            _cameraAlive = true;
+            _lastFrameTime = DateTime.Now;
+            _logService?.Log("[Mock] 模拟相机恢复（心跳恢复）");
+        }
+
+        /// <summary>模拟方案崩溃：卸载方案并触发 SolutionCrashed 事件，用于测试崩溃自动恢复。</summary>
+        public void SimulateSolutionCrash()
+        {
+            _isSolutionLoaded = false;
+            _currentProcedureName = string.Empty;
+            _logService?.Log("[Mock] 模拟方案崩溃");
+            SolutionCrashed?.Invoke(this, EventArgs.Empty);
         }
 
         public void LoadSolution(string solPath)
@@ -97,6 +138,8 @@ namespace TripleDetection.Application.VmServices
                 _logService?.Log("[Mock] 请先加载方案");
                 return;
             }
+            // 每次检测视为一次出图，刷新相机心跳时间戳
+            _lastFrameTime = DateTime.Now;
 
             var sw = Stopwatch.StartNew();
             // 在后台线程模拟检测耗时与 SDK 回调线程模型

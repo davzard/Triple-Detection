@@ -24,6 +24,7 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Margin="0,0,5,0" Background="{StaticResource CardBackgroundBrush}"
@@ -32,6 +33,7 @@
                     <TextBlock Text="产线状态" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
                     <TextBlock x:Name="txtLineState" Text="未连接" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,4,0,0"/>
                     <TextBlock x:Name="txtCurrentTask" Text="当前任务: --" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="txtCycleStats" Text="节拍: --" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
 
@@ -44,7 +46,16 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Column="2" Margin="5,0,0,0" Background="{StaticResource CardBackgroundBrush}"
+            <Border Grid.Column="2" Margin="5,0" Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="相机心跳" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                    <TextBlock x:Name="txtCameraState" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="txtCameraDetail" Text="最后帧: --" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="3" Margin="5,0,0,0" Background="{StaticResource CardBackgroundBrush}"
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="12">
                 <StackPanel>
                     <TextBlock Text="报警" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
@@ -68,10 +79,11 @@
         </GroupBox>
 
         <!-- Mock 模拟（仅 Mock 模式显示） -->
-        <GroupBox x:Name="grpMock" Grid.Row="3" Header="Mock PLC 模拟（测试用）" Margin="10,5"
+        <GroupBox x:Name="grpMock" Grid.Row="3" Header="Mock 模拟（测试用）" Margin="10,5"
                   BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Visibility="Collapsed">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -82,7 +94,12 @@
                     <Button Content="模拟重连" Width="90" Margin="0,0,5,0" Click="BtnSimReconnect_Click"/>
                     <TextBlock x:Name="txtTriggerCount" Text="触发次数: 0" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="{StaticResource TextSecondaryBrush}"/>
                 </StackPanel>
-                <TextBlock x:Name="txtPlcWrites" Grid.Row="1" Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}"
+                <StackPanel x:Name="grpMockEngine" Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0" Visibility="Collapsed">
+                    <Button Content="模拟相机离线" Width="100" Margin="0,0,5,0" Click="BtnSimCameraLoss_Click"/>
+                    <Button Content="模拟相机恢复" Width="100" Margin="0,0,5,0" Click="BtnSimCameraRestore_Click"/>
+                    <Button Content="模拟方案崩溃" Width="100" Margin="0,0,5,0" Click="BtnSimSolutionCrash_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="txtPlcWrites" Grid.Row="2" Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}"
                            TextWrapping="Wrap" Text="App 写入: --"/>
             </Grid>
         </GroupBox>

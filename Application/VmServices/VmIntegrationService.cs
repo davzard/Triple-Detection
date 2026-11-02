@@ -11,16 +11,23 @@ using TripleDetection.Application.Services;
 namespace TripleDetection.Application.VmServices
 {
 #if VM_SDK
+using System.Threading;
 using VM.Core;
 using VM.PlatformSDKCS;
 using GlobalVariableModuleCs;
+using TripleDetection.Application.Line;
     /// <summary>
     /// VisionMaster 4.x 真实检测引擎。仅在 VM_SDK 宏启用（SDK DLL 齐全）时编译。
+    /// 相机心跳（ICameraHeartbeat）：方案加载且未崩溃时定时刷新出图时间戳（采集模块出帧的代理指标；
+    /// 有 VM 环境后可替换为采集模块帧计数/时间戳），结果回调时同步刷新。
+    /// 方案崩溃（SolutionCrashed）：OnWorkStatusEvent 收到错误工作状态时触发，由编排器自动重载。
     /// </summary>
-    public class VmIntegrationService : IDetectionEngine
+    public class VmIntegrationService : IDetectionEngine, ICameraHeartbeat
     {
         private VmProcedure _procedure;
-        private bool _isSolutionLoad = false;
+        private volatile bool _isSolutionLoad = false;
+        private DateTime? _lastFrameTime;
+        private Timer _heartbeatTimer;
         private LoggingService _logService;
         private IDetectionRecordService _detectionRecordService;
         private IEventAggregator _eventAggregator;
@@ -31,6 +38,12 @@ using GlobalVariableModuleCs;
 
         public event EventHandler<DetectionResult> DetectionResult;
 
+        /// <summary>方案崩溃事件（OnWorkStatusEvent 错误状态触发）</summary>
+        public event EventHandler SolutionCrashed;
+
+        /// <summary>最近一次出图时间（ICameraHeartbeat，相机心跳监控用）</summary>
+        public DateTime? LastFrameTime => _lastFrameTime;
+
         // 注：VM 回调取图存盘（ImageArchiver）在后续阶段接通，届时再注入 ImageArchiver
         public VmIntegrationService(LoggingService logService, IDetectionRecordService detectionRecordService, IEventAggregator eventAggregator = null, StationContext stationContext = null)
         {
@@ -39,12 +52,19 @@ using GlobalVariableModuleCs;
             _eventAggregator = eventAggregator;
             _stationContext = stationContext;
             VmSolution.OnWorkStatusEvent += VmSolution_OnWorkStatusEvent;
+            // 相机心跳：方案加载且未崩溃时每秒刷新出图时间戳（代理指标）
+            _heartbeatTimer = new Timer(_ =>
+            {
+                if (_isSolutionLoad)
+                    _lastFrameTime = DateTime.Now;
+            }, null, 1000, 1000);
         }
 
         public void LoadSolution(string solPath)
         {
             VmSolution.Load(solPath);
             _isSolutionLoad = true;
+            _lastFrameTime = DateTime.Now;
 
             ProcessInfoList processList = VmSolution.Instance.GetAllProcedureList();
             if (processList.nNum > 0)
@@ -142,9 +162,18 @@ using GlobalVariableModuleCs;
         private void VmSolution_OnWorkStatusEvent(ImvsSdkDefine.IMVS_MODULE_WORK_STAUS workStatusInfo)
         {
             _logService?.Log($"[Callback] nWorkStatus={workStatusInfo.nWorkStatus}, nProcessID={workStatusInfo.nProcessID}");
+            // 错误工作状态 → 方案崩溃（编排器订阅后自动重载，次数上限，超限 Alarm 2002）
+            if (workStatusInfo.nWorkStatus != 0)
+            {
+                _isSolutionLoad = false;
+                _logService?.Log($"[Callback] 方案崩溃（nWorkStatus={workStatusInfo.nWorkStatus}），已触发 SolutionCrashed");
+                SolutionCrashed?.Invoke(this, EventArgs.Empty);
+                return;
+            }
             if (workStatusInfo.nWorkStatus == 0 && workStatusInfo.nProcessID == 10000)
             {
                 _logService?.Log("[Callback] 进入回调处理");
+                _lastFrameTime = DateTime.Now; // 出图完成，刷新相机心跳
                 _stopwatch.Stop();
                 try
                 {

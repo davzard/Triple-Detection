@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using DryIoc;
 using Prism.DryIoc;
@@ -30,6 +31,11 @@ using TripleDetection.Presentation.Views.Settings;
 public partial class App : PrismApplication
 {
     private static Mutex _mutex;
+
+    // Phase 2 服务实例（RegisterTypes 中赋值，启动/退出时直接使用）
+    private CameraHealthMonitor _cameraHealthMonitor;
+    private ShiftService _shiftService;
+    private LineMaintenanceService _lineMaintenance;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -121,9 +127,36 @@ public partial class App : PrismApplication
             container.RegisterInstance<IPlcGateway>(new MockPlcGateway(loggingService));
         }
         container.RegisterInstance(new DetectionWatchdog());
-        container.RegisterInstance(new LineController(loggingService,
+        var lineController = new LineController(loggingService,
             configService.GetInt(SystemConfigService.CatReject, SystemConfigService.KeyConsecutiveNgToStopLine, 10),
-            configService.GetString(SystemConfigService.CatPlc, SystemConfigService.KeyPlcOnDisconnect, "StopLine")));
+            configService.GetString(SystemConfigService.CatPlc, SystemConfigService.KeyPlcOnDisconnect, "StopLine"));
+        container.RegisterInstance(lineController);
+
+        // Phase 2：相机心跳监控（引擎实现 ICameraHeartbeat 时启用）
+        var engineInstance = container.Resolve<IDetectionEngine>();
+        if (engineInstance is ICameraHeartbeat heartbeatSource)
+        {
+            _cameraHealthMonitor = new CameraHealthMonitor(heartbeatSource, lineController,
+                loggingService,
+                configService.GetInt(SystemConfigService.CatCamera, SystemConfigService.KeyHeartbeatTimeoutMs, 30000));
+            container.RegisterInstance(_cameraHealthMonitor);
+        }
+
+        // Phase 2：节拍监控 / 班次服务 / 数据维护（备份 + 图像清理）
+        container.RegisterInstance(new CycleTimeMonitor(loggingService));
+        _shiftService = new ShiftService(
+            (TripleDetectionDbContext)container.Resolve<TripleDetectionDbContext>(),
+            loggingService,
+            container.Resolve<StationContext>());
+        container.RegisterInstance(_shiftService);
+        container.RegisterInstance(new DatabaseBackupService(dbPath, loggingService));
+        container.RegisterInstance(new ImageRetentionService(loggingService));
+        _lineMaintenance = new LineMaintenanceService(configService,
+            container.Resolve<DatabaseBackupService>(),
+            container.Resolve<ImageRetentionService>(),
+            loggingService);
+        container.RegisterInstance(_lineMaintenance);
+
         // 编排器按构造注入解析（依赖均为已注册单例/瞬态，首次 Resolve 时实例化）
         container.Register<LineOrchestrator>(Reuse.Singleton);
 
@@ -177,6 +210,14 @@ public partial class App : PrismApplication
             orchestrator?.Stop();
         }
         catch { /* 退出路径不阻塞 */ }
+        try
+        {
+            // Phase 2：停心跳监控、关闭未结束的班次、退出前最后维护一次
+            _cameraHealthMonitor?.Stop();
+            _shiftService?.Dispose();
+            _lineMaintenance?.RunMaintenance();
+        }
+        catch { /* 退出路径不阻塞 */ }
         base.OnExit(e);
     }
 
@@ -186,6 +227,18 @@ public partial class App : PrismApplication
         {
             var orchestrator = Container.Resolve<LineOrchestrator>();
             orchestrator?.Start();
+
+            // Phase 2：启动相机心跳监控
+            _cameraHealthMonitor?.Start();
+
+            // Phase 2：启动数据维护（DB 备份 + 图像清理），后台执行不阻塞 UI
+            var maintenance = _lineMaintenance;
+            if (maintenance != null)
+                Task.Run(() =>
+                {
+                    try { maintenance.RunMaintenance(); }
+                    catch { /* 维护失败仅记日志 */ }
+                });
         }
         catch (Exception ex)
         {

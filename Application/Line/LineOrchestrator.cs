@@ -51,6 +51,14 @@ namespace TripleDetection.Application.Line
         private bool _cycleHandled;
         private bool _started;
 
+        // ===== Phase 2：班次 / 节拍 / 方案崩溃自动恢复（设计文档 §3.3.4/§3.3.5）=====
+        private readonly ShiftService? _shiftService;
+        private readonly CycleTimeMonitor? _cycleMonitor;
+        private int _maxReloadAttempts = 2;
+        private int _reloadAttempts;                  // 连续重载次数（出现一次正常结果后清零）
+        private string _solutionPath = string.Empty;  // 当前方案路径（崩溃后自动重载用）
+        private ProdTask? _currentTask;               // 当前任务（崩溃后重写三效期用）
+
         public LineOrchestrator(
             IPlcGateway plc,
             ILineController line,
@@ -61,7 +69,9 @@ namespace TripleDetection.Application.Line
             IDetectionRecordService recordService,
             ITaskService taskService,
             IProductService productService,
-            StationContext stationContext)
+            StationContext stationContext,
+            ShiftService? shiftService = null,
+            CycleTimeMonitor? cycleMonitor = null)
         {
             _plc = plc;
             _line = line;
@@ -73,6 +83,8 @@ namespace TripleDetection.Application.Line
             _taskService = taskService;
             _productService = productService;
             _stationContext = stationContext;
+            _shiftService = shiftService;
+            _cycleMonitor = cycleMonitor;
         }
 
         // ===== 生命周期 =====
@@ -90,12 +102,14 @@ namespace TripleDetection.Application.Line
             _onCaptureTimeout = _config.GetString(SystemConfigService.CatDetection, SystemConfigService.KeyOnCaptureTimeout, "TreatAsNG");
             _rejectDelayMs = _config.GetInt(SystemConfigService.CatReject, SystemConfigService.KeyRejectDelayMs, 50);
             _rejectDurationMs = _config.GetInt(SystemConfigService.CatReject, SystemConfigService.KeyRejectDurationMs, 200);
+            _maxReloadAttempts = _config.GetInt(SystemConfigService.CatRecovery, SystemConfigService.KeyMaxReloadAttempts, 2);
 
             _plc.TriggerReceived += OnPlcTrigger;
             _plc.RecipeChanged += OnRecipeChanged;
             _plc.PlcDisconnected += OnPlcDisconnected;
             _plc.PlcReconnected += OnPlcReconnected;
             _engine.DetectionResult += OnEngineResult;
+            _engine.SolutionCrashed += OnSolutionCrashed;
             _watchdog.Timeout += OnWatchdogTimeout;
             _line.StateChanged += OnLineStateChanged;
             _line.AlarmRaised += OnLineAlarm;
@@ -128,6 +142,7 @@ namespace TripleDetection.Application.Line
             _plc.PlcDisconnected -= OnPlcDisconnected;
             _plc.PlcReconnected -= OnPlcReconnected;
             _engine.DetectionResult -= OnEngineResult;
+            _engine.SolutionCrashed -= OnSolutionCrashed;
             _watchdog.Timeout -= OnWatchdogTimeout;
             _line.StateChanged -= OnLineStateChanged;
             _line.AlarmRaised -= OnLineAlarm;
@@ -188,7 +203,11 @@ namespace TripleDetection.Application.Line
                 _productionDate = task.ProductionDate;
                 _expirationDate = task.ExpirationDate;
                 _taskContextSet = true;
+                _solutionPath = product.SolFilePath;
+                _currentTask = task;
+                _reloadAttempts = 0;
             }
+            _shiftService?.OpenShift(task.Id, SessionManager.CurrentUserId);
             _line.StartShift();
             _logService?.LogInfo("产线", $"开班成功：任务={task.Name} 产品={product.Code} 批次={task.BatchNumber}");
             return true;
@@ -204,7 +223,14 @@ namespace TripleDetection.Application.Line
         {
             _watchdog.Stop();
             _line.EndShift();
-            lock (_gate) { _taskContextSet = false; }
+            lock (_gate)
+            {
+                _taskContextSet = false;
+                _currentTask = null;
+                _solutionPath = string.Empty;
+                _reloadAttempts = 0;
+            }
+            _shiftService?.CloseShift();
             _logService?.LogInfo("产线", "下班：自动运行已停止");
         }
 
@@ -240,6 +266,9 @@ namespace TripleDetection.Application.Line
                 Interlocked.Exchange(ref _detecting, 0);
                 _watchdog.Stop();
                 _logService?.LogError("产线", $"RunOnce 异常：{ex.Message}");
+                // RunOnce 异常且方案已卸载 → 视为崩溃（事件可能未触发），主动尝试恢复
+                if (!_engine.IsSolutionLoaded)
+                    TryReloadSolution();
             }
         }
 
@@ -262,6 +291,14 @@ namespace TripleDetection.Application.Line
 
             bool isTimeout = result.NgReason == NgReason.Timeout;
             _line.OnDetectionResult(result.IsOK, isTimeout);
+
+            // Phase 2：节拍监控 + 班次统计 + 崩溃恢复计数清零
+            _cycleMonitor?.Record(result.ElapsedMs);
+            _shiftService?.RecordResult(result.IsOK);
+            if (result.IsOK)
+            {
+                lock (_gate) _reloadAttempts = 0;
+            }
 
             Task.Run(async () =>
             {
@@ -348,9 +385,69 @@ namespace TripleDetection.Application.Line
                 _productionDate = task.ProductionDate;
                 _expirationDate = task.ExpirationDate;
                 _taskContextSet = true;
+                _solutionPath = product.SolFilePath;
+                _currentTask = task;
+                _reloadAttempts = 0;
             }
             _logService?.LogInfo("产线", $"换型完成：产品={product.Code} 任务={task.Name} 批次={task.BatchNumber}");
             return true;
+        }
+
+        // ===== Phase 2：方案崩溃自动恢复（设计文档 §3.3.4/§3.3.5）=====
+
+        private void OnSolutionCrashed(object? sender, EventArgs e)
+        {
+            if (_line.State == LineState.Idle) return; // 未开班，无需恢复
+            _logService?.LogWarn("产线", "检测到方案崩溃，尝试自动重载…");
+            TryReloadSolution();
+        }
+
+        /// <summary>
+        /// 自动重载当前方案（限制次数，超限触发 Alarm 2002）。
+        /// 重载成功后重写任务上下文与三效期全局变量，产线保持 Running 继续自动运行。
+        /// </summary>
+        private void TryReloadSolution()
+        {
+            string solPath;
+            ProdTask? task;
+            int attempt;
+            lock (_gate)
+            {
+                _reloadAttempts++;
+                attempt = _reloadAttempts;
+                solPath = _solutionPath;
+                task = _currentTask;
+            }
+
+            if (string.IsNullOrEmpty(solPath) || task == null)
+            {
+                _logService?.LogError("产线", "方案崩溃：无任务上下文，无法自动重载");
+                _line.RaiseAlarm(LineAlarmCode.SolutionCrash, "方案崩溃且无任务上下文，无法自动重载");
+                return;
+            }
+
+            if (attempt > _maxReloadAttempts)
+            {
+                _logService?.LogError("产线", $"方案崩溃：自动重载已达上限（{_maxReloadAttempts} 次），触发报警");
+                _line.RaiseAlarm(LineAlarmCode.SolutionCrash, $"方案崩溃：自动重载超过上限（{_maxReloadAttempts} 次），需人工处理");
+                return;
+            }
+
+            try
+            {
+                _engine.LoadSolution(solPath);
+                if (!_engine.IsSolutionLoaded)
+                    throw new InvalidOperationException("方案加载未生效");
+                _engine.SetCurrentTaskContext(task.Id, task.ProductId, task.BatchNumber, task.ProductionDate, task.ExpirationDate);
+                WriteThreePeriodToVm(task);
+                _logService?.LogInfo("产线", $"方案自动重载成功（第 {attempt}/{_maxReloadAttempts} 次），产线继续运行");
+            }
+            catch (Exception ex)
+            {
+                _logService?.LogError("产线", $"方案自动重载失败（第 {attempt}/{_maxReloadAttempts} 次）：{ex.Message}");
+                if (attempt >= _maxReloadAttempts)
+                    _line.RaiseAlarm(LineAlarmCode.SolutionCrash, $"方案崩溃：自动重载失败 {attempt} 次，需人工处理");
+            }
         }
 
         // ===== 状态机事件 =====

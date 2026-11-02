@@ -14,6 +14,9 @@ namespace TripleDetection.Application.VmServices
         /// <summary>检测结果回调（非 UI 线程触发）</summary>
         event EventHandler<DetectionResult> DetectionResult;
 
+        /// <summary>方案崩溃事件（非 UI 线程触发）。订阅方应尝试自动重载方案（次数上限，超限报警）。</summary>
+        event EventHandler SolutionCrashed;
+
         /// <summary>方案是否已加载</summary>
         bool IsSolutionLoaded { get; }
 

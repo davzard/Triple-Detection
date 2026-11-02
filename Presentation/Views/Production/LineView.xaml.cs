@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using TripleDetection.Application.Line;
 using TripleDetection.Application.Services;
+using TripleDetection.Application.VmServices;
 using TripleDetection.Domain.Entities;
 using TripleDetection.Domain.Enums;
 using TripleDetection.Infrastructure.Device;
@@ -20,11 +21,14 @@ namespace TripleDetection.Presentation.Views.Production
         private readonly LineOrchestrator _orchestrator;
         private readonly ITaskService _taskService;
         private readonly LoggingService _logService;
+        private readonly IDetectionEngine _engine;
+        private readonly CycleTimeMonitor? _cycleMonitor;
         private readonly DispatcherTimer _timer;
         private List<ProdTask> _taskList = new List<ProdTask>();
 
         public LineView(IPlcGateway plc, ILineController line, LineOrchestrator orchestrator,
-            ITaskService taskService, LoggingService logService)
+            ITaskService taskService, LoggingService logService,
+            IDetectionEngine engine = null, CycleTimeMonitor cycleMonitor = null)
         {
             InitializeComponent();
             _plc = plc;
@@ -32,6 +36,8 @@ namespace TripleDetection.Presentation.Views.Production
             _orchestrator = orchestrator;
             _taskService = taskService;
             _logService = logService;
+            _engine = engine;
+            _cycleMonitor = cycleMonitor;
 
             LoadTasks();
 
@@ -43,6 +49,8 @@ namespace TripleDetection.Presentation.Views.Production
             {
                 grpMock.Visibility = Visibility.Visible;
                 txtPlcMode.Text = "模式: Mock（模拟）";
+                if (_engine is MockDetectionEngine)
+                    grpMockEngine.Visibility = Visibility.Visible;
             }
             else
             {
@@ -105,6 +113,32 @@ namespace TripleDetection.Presentation.Views.Production
             txtPlcState.Text = _plc.IsConnected ? "已连接" : "未连接";
             txtPlcState.Foreground = new SolidColorBrush(_plc.IsConnected
                 ? Color.FromRgb(0, 150, 0) : Color.FromRgb(200, 0, 0));
+
+            // 相机心跳（Phase 2）
+            if (_engine is ICameraHeartbeat hb && hb.LastFrameTime is DateTime lastFrame)
+            {
+                var ageMs = (long)(DateTime.Now - lastFrame).TotalMilliseconds;
+                var healthy = ageMs < 5000;
+                txtCameraState.Text = healthy ? "正常" : "超时";
+                txtCameraState.Foreground = new SolidColorBrush(healthy
+                    ? Color.FromRgb(0, 150, 0) : Color.FromRgb(200, 0, 0));
+                txtCameraDetail.Text = $"最后帧: {ageMs}ms 前";
+            }
+            else
+            {
+                txtCameraState.Text = "--";
+                txtCameraState.Foreground = new SolidColorBrush(Color.FromRgb(120, 120, 120));
+                txtCameraDetail.Text = "最后帧: --";
+            }
+
+            // 节拍统计（Phase 2）
+            if (_cycleMonitor != null)
+            {
+                var (count, avg, p99) = _cycleMonitor.GetStats();
+                txtCycleStats.Text = count > 0
+                    ? $"节拍: 均值 {avg}ms / P99 {p99}ms（{count} 样本）"
+                    : "节拍: --";
+            }
 
             if (_line.AlarmCode > 0)
             {
@@ -205,6 +239,23 @@ namespace TripleDetection.Presentation.Views.Production
         private void BtnSimReconnect_Click(object sender, RoutedEventArgs e)
         {
             if (_plc is MockPlcGateway mock) mock.SimulateReconnect();
+        }
+
+        // ===== Phase 2 Mock 模拟（相机 / 方案崩溃）=====
+
+        private void BtnSimCameraLoss_Click(object sender, RoutedEventArgs e)
+        {
+            if (_engine is MockDetectionEngine mock) mock.SimulateCameraLoss();
+        }
+
+        private void BtnSimCameraRestore_Click(object sender, RoutedEventArgs e)
+        {
+            if (_engine is MockDetectionEngine mock) mock.SimulateCameraRestore();
+        }
+
+        private void BtnSimSolutionCrash_Click(object sender, RoutedEventArgs e)
+        {
+            if (_engine is MockDetectionEngine mock) mock.SimulateSolutionCrash();
         }
     }
 }

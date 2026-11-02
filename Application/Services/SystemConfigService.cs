@@ -38,6 +38,19 @@ namespace TripleDetection.Application.Services
         public const string KeyRejectDurationMs = "DurationMs";
         public const string KeyConsecutiveNgToStopLine = "ConsecutiveNgToStopLine";
 
+        // ---- Phase 2 健壮性配置（设计文档 §3.3.4 / §3.5）----
+        public const string CatCamera = "Camera";
+        public const string KeyHeartbeatTimeoutMs = "HeartbeatTimeoutMs";
+
+        public const string CatRecovery = "Recovery";
+        public const string KeyMaxReloadAttempts = "MaxReloadAttempts";
+
+        public const string CatImages = "Images";
+        public const string KeyRetentionDays = "RetentionDays";
+
+        public const string CatBackup = "Backup";
+        public const string KeyKeepCount = "KeepCount";
+
         /// <summary>默认值表：(Category, Key, Value, Description)。EnsureDefaults 幂等补种。</summary>
         public static readonly (string Cat, string Key, string Value, string Desc)[] Defaults =
         {
@@ -54,6 +67,10 @@ namespace TripleDetection.Application.Services
             (CatReject, KeyRejectDelayMs, "50", "剔废命令延迟 ms（含线速补偿）"),
             (CatReject, KeyRejectDurationMs, "200", "剔废命令持续 ms"),
             (CatReject, KeyConsecutiveNgToStopLine, "10", "连续 NG 停线阈值"),
+            (CatCamera, KeyHeartbeatTimeoutMs, "30000", "相机心跳丢失报警阈值 ms（运行中无新帧）"),
+            (CatRecovery, KeyMaxReloadAttempts, "2", "方案崩溃自动重载次数上限（超限 Alarm 2002）"),
+            (CatImages, KeyRetentionDays, "30", "检测图像保留天数（超期目录删除）"),
+            (CatBackup, KeyKeepCount, "7", "数据库备份保留份数"),
         };
 
         public SystemConfigService(TripleDetectionDbContext db, LoggingService logService)
