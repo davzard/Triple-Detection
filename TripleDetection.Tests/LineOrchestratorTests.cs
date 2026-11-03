@@ -135,7 +135,7 @@ namespace TripleDetection.Tests
             public DetectionWatchdog Watchdog;
         }
 
-        private Fixture Create(string onTimeout = "TreatAsNG", int timeoutMs = 5000, int ngThreshold = 3, int maxReloadAttempts = 2, ITimeSyncService timeSync = null)
+        private Fixture Create(string onTimeout = "TreatAsNG", int timeoutMs = 5000, int ngThreshold = 3, int maxReloadAttempts = 2, ITimeSyncService timeSync = null, int heartbeatIntervalMs = 1000)
         {
             var log = new LoggingService(_dir, null);
             var dbPath = Path.Combine(_dir, "orch.db");
@@ -146,6 +146,7 @@ namespace TripleDetection.Tests
             config.Set(SystemConfigService.CatDetection, SystemConfigService.KeyCaptureTimeoutMs, timeoutMs.ToString());
             config.Set(SystemConfigService.CatDetection, SystemConfigService.KeyOnCaptureTimeout, onTimeout);
             config.Set(SystemConfigService.CatRecovery, SystemConfigService.KeyMaxReloadAttempts, maxReloadAttempts.ToString());
+            config.Set(SystemConfigService.CatPlc, SystemConfigService.KeyPlcHeartbeatIntervalMs, heartbeatIntervalMs.ToString());
 
             var plc = new MockPlcGateway(log);
             var line = new LineController(log, ngThreshold, "StopLine");
@@ -545,6 +546,48 @@ namespace TripleDetection.Tests
             Assert.True(WaitFor(() => f.Engine.SolutionLoaded));
             Assert.Equal(LineState.Running, f.Line.State);
             Assert.Equal(0, f.Line.AlarmCode);
+        }
+
+        // ===== PLC 心跳（通信看门狗，设计文档 §3.9）=====
+
+        [Fact]
+        public void Running_WritesPlcHeartbeat_Periodically()
+        {
+            var f = Create(heartbeatIntervalMs: 100);
+            SeedShiftData(f.Products, f.Tasks);
+            f.Orchestrator.StartShift(10);
+            f.Orchestrator.StartAutoRun();
+            Assert.Equal(LineState.Running, f.Line.State);
+
+            Assert.True(WaitFor(() => f.Plc.HeartbeatCount >= 3, 5000), "运行期间应周期性写 PLC 心跳");
+            Assert.True(f.Plc.LastHeartbeat > 0, "心跳值应为递增计数");
+            f.Orchestrator.Stop();
+        }
+
+        [Fact]
+        public void Heartbeat_StopsWhenNotRunning()
+        {
+            var f = Create(heartbeatIntervalMs: 100);
+            SeedShiftData(f.Products, f.Tasks);
+
+            // 就绪（未自动运行）：不应写心跳
+            f.Orchestrator.StartShift(10);
+            Assert.Equal(LineState.Ready, f.Line.State);
+            Thread.Sleep(300);
+            Assert.Equal(0, f.Plc.HeartbeatCount);
+
+            // 自动运行：开始写心跳
+            f.Orchestrator.StartAutoRun();
+            Assert.True(WaitFor(() => f.Plc.HeartbeatCount >= 2, 5000));
+            int countAtRunning = f.Plc.HeartbeatCount;
+
+            // 停止自动运行 → 就绪：心跳应停止（最多允许 1 次切换前已触发的在途写入）
+            f.Orchestrator.StopAutoRun();
+            Assert.Equal(LineState.Ready, f.Line.State);
+            Thread.Sleep(300);
+            Assert.True(f.Plc.HeartbeatCount - countAtRunning <= 1,
+                $"停止后心跳应停止，实际又写了 {f.Plc.HeartbeatCount - countAtRunning} 次");
+            f.Orchestrator.Stop();
         }
     }
 }
