@@ -63,5 +63,11 @@ namespace TripleDetection.Infrastructure.Device
 
         /// <summary>写工位状态（STATION_STATUS：0 空闲 / 1 运行 / 2 报警）</summary>
         Task WriteStationStatusAsync(int status, CancellationToken ct = default);
+
+        /// <summary>
+        /// 写心跳（HEARTBEAT 寄存器，App 存活信号）：运行期间周期性写入递增计数。
+        /// PLC 侧监视该寄存器超时未变化即停线（通信看门狗，见 docs/plc/plc-integration.md）。
+        /// </summary>
+        Task WriteHeartbeatAsync(int value, CancellationToken ct = default);
     }
 }

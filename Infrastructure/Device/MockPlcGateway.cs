@@ -33,6 +33,8 @@ namespace TripleDetection.Infrastructure.Device
         public volatile int LastLineStopAlarmCode;
         public volatile int LastAlarmCode;
         public volatile int LastStationStatus;
+        public volatile int LastHeartbeat;
+        public int HeartbeatCount; // Interlocked 递增，测试断言心跳频率用
         public volatile int TriggerCount;
 
         public Task ConnectAsync(CancellationToken ct = default)
@@ -81,6 +83,13 @@ namespace TripleDetection.Infrastructure.Device
         public Task WriteStationStatusAsync(int status, CancellationToken ct = default)
         {
             LastStationStatus = status;
+            return Task.CompletedTask;
+        }
+
+        public Task WriteHeartbeatAsync(int value, CancellationToken ct = default)
+        {
+            LastHeartbeat = value;
+            Interlocked.Increment(ref HeartbeatCount);
             return Task.CompletedTask;
         }
 

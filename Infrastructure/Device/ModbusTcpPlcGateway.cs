@@ -112,6 +112,9 @@ namespace TripleDetection.Infrastructure.Device
         public Task WriteStationStatusAsync(int status, CancellationToken ct = default)
             => WriteSingleAsync(_map.StationStatusOffset, (ushort)status, "STATION_STATUS");
 
+        public Task WriteHeartbeatAsync(int value, CancellationToken ct = default)
+            => WriteSingleAsync(_map.HeartbeatOffset, (ushort)value, "HEARTBEAT");
+
         // ===== 轮询与重连 =====
 
         private async Task RunPollLoopAsync(CancellationToken ct)

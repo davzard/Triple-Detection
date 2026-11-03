@@ -19,6 +19,12 @@ namespace TripleDetection.Infrastructure.Device
         public int LineStopOffset { get; set; } = 13;
         public int AlarmCodeOffset { get; set; } = 14;
         public int StationStatusOffset { get; set; } = 15;
+        /// <summary>
+        /// 心跳寄存器（App → PLC，40017）：运行期间 App 每秒递增写入。
+        /// PLC 侧监视该寄存器，超时未变化（建议 ≥5s）且产线处于自动模式时停线——
+        /// 这是"检测软件崩溃/卡死时产线安全停机"的通信看门狗，见 docs/plc/plc-integration.md。
+        /// </summary>
+        public int HeartbeatOffset { get; set; } = 16;
 
         // 可选：剔除参数寄存器（-1 表示未配置，PLC 侧使用固定参数）
         public int RejectDelayOffset { get; set; } = -1;

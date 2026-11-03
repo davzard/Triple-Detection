@@ -29,6 +29,7 @@ namespace TripleDetection.Application.Services
         public const string KeyPlcRegisterMap = "RegisterMap";
         public const string KeyPlcOnDisconnect = "OnDisconnect";
         public const string KeyPlcPollIntervalMs = "PollIntervalMs";
+        public const string KeyPlcHeartbeatIntervalMs = "HeartbeatIntervalMs";
 
         public const string CatDetection = "Detection";
         public const string KeyCaptureTimeoutMs = "CaptureTimeoutMs";
@@ -63,6 +64,7 @@ namespace TripleDetection.Application.Services
             (CatPlc, KeyPlcRegisterMap, "plc_register_map.json", "寄存器表 JSON 文件名（Config 目录下，可选）"),
             (CatPlc, KeyPlcOnDisconnect, "StopLine", "PLC 断线策略：StopLine / ManualMode"),
             (CatPlc, KeyPlcPollIntervalMs, "500", "寄存器轮询间隔 ms"),
+            (CatPlc, KeyPlcHeartbeatIntervalMs, "1000", "PLC 心跳写入间隔 ms（运行期间；PLC 侧超时停线阈值应 ≥ 5 倍该值）"),
             (CatDetection, KeyCaptureTimeoutMs, "5000", "单次检测超时 ms（看门狗）"),
             (CatDetection, KeyOnCaptureTimeout, "TreatAsNG", "超时策略：TreatAsNG / Ignore / StopLine"),
             (CatDetection, KeyMinTriggerIntervalMs, "500", "触发防抖最小间隔 ms"),

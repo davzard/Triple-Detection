@@ -56,6 +56,11 @@ namespace TripleDetection.Application.Line
         private readonly CycleTimeMonitor? _cycleMonitor;
         private readonly HmiSoundService? _hmiSound;
         private readonly ITimeSyncService? _timeSync;
+
+        // ===== PLC 心跳（通信看门狗，设计文档 §3.9）=====
+        private Timer _heartbeatTimer;
+        private int _heartbeatCounter;
+        private int _heartbeatIntervalMs = 1000;
         private int _maxReloadAttempts = 2;
         private int _reloadAttempts;                  // 连续重载次数（出现一次正常结果后清零）
         private string _solutionPath = string.Empty;  // 当前方案路径（崩溃后自动重载用）
@@ -116,6 +121,7 @@ namespace TripleDetection.Application.Line
             _rejectDelayMs = _config.GetInt(SystemConfigService.CatReject, SystemConfigService.KeyRejectDelayMs, 50);
             _rejectDurationMs = _config.GetInt(SystemConfigService.CatReject, SystemConfigService.KeyRejectDurationMs, 200);
             _maxReloadAttempts = _config.GetInt(SystemConfigService.CatRecovery, SystemConfigService.KeyMaxReloadAttempts, 2);
+            _heartbeatIntervalMs = Math.Max(200, _config.GetInt(SystemConfigService.CatPlc, SystemConfigService.KeyPlcHeartbeatIntervalMs, 1000));
 
             _plc.TriggerReceived += OnPlcTrigger;
             _plc.RecipeChanged += OnRecipeChanged;
@@ -135,7 +141,11 @@ namespace TripleDetection.Application.Line
             {
                 _logService?.LogError("产线", $"PLC 连接启动失败：{ex.Message}");
             }
-            _logService?.LogInfo("产线", $"编排器已启动：超时={_captureTimeoutMs}ms 策略={_onCaptureTimeout} 剔废={_rejectDelayMs}/{_rejectDurationMs}ms");
+
+            // PLC 心跳：运行期间周期性写 HEARTBEAT 寄存器，PLC 侧超时未变化即停线（通信看门狗）
+            _heartbeatTimer = new Timer(WritePlcHeartbeat, null, _heartbeatIntervalMs, _heartbeatIntervalMs);
+
+            _logService?.LogInfo("产线", $"编排器已启动：超时={_captureTimeoutMs}ms 策略={_onCaptureTimeout} 剔废={_rejectDelayMs}/{_rejectDurationMs}ms 心跳={_heartbeatIntervalMs}ms");
         }
 
         /// <summary>停止编排：停看门狗、退订事件、断开 PLC。应用退出时调用。</summary>
@@ -159,6 +169,8 @@ namespace TripleDetection.Application.Line
             _watchdog.Timeout -= OnWatchdogTimeout;
             _line.StateChanged -= OnLineStateChanged;
             _line.AlarmRaised -= OnLineAlarm;
+            _heartbeatTimer?.Dispose();
+            _heartbeatTimer = null;
 
             // 退出前清除安灯（若仍有活动报警码）
             try { _plc.WriteAlarmCodeAsync(0).GetAwaiter().GetResult(); }
@@ -283,6 +295,22 @@ namespace TripleDetection.Application.Line
         }
 
         // ===== PLC 事件 =====
+
+        /// <summary>
+        /// PLC 心跳写入（通信看门狗，设计文档 §3.9）：仅运行期间写 HEARTBEAT 寄存器（递增计数）。
+        /// 非运行状态不写——此时产线不在自动检测模式下，PLC 侧不应要求心跳。
+        /// 写入失败静默（断线时网关本身已触发 OnPlcDisconnected → StopLine 报警，避免每秒刷日志）。
+        /// </summary>
+        private void WritePlcHeartbeat(object state)
+        {
+            if (_line.State != LineState.Running) return;
+            int value = Interlocked.Increment(ref _heartbeatCounter);
+            Task.Run(async () =>
+            {
+                try { await _plc.WriteHeartbeatAsync(value); }
+                catch { /* 断线场景由 PlcDisconnected 事件处理 */ }
+            });
+        }
 
         private void OnPlcTrigger(object sender, PlcTriggerEventArgs e)
         {
